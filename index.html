@@ -90,7 +90,13 @@
 <!-- ── DASHBOARD VIEW ──────────────────────────────── -->
 <div id="dashboard-view" style="display:none; min-height:100vh;">
   <div class="topbar">
-    <div class="topbar-logo">idea<span>flow</span></div>
+    <div class="topbar-left">
+      <div class="topbar-logo">idea<span>flow</span></div>
+      <nav class="topbar-nav">
+        <button class="nav-tab active" data-tab="all" onclick="switchTab('all')">All Ideas</button>
+        <button class="nav-tab" data-tab="approved" onclick="switchTab('approved')">✦ AI Approved</button>
+      </nav>
+    </div>
     <div class="topbar-right">
       <div class="topbar-user">signed in as <strong id="user-display"></strong></div>
       <button class="btn-theme" id="theme-toggle" onclick="toggleTheme()" title="Toggle theme">🌙</button>
@@ -106,7 +112,7 @@
         <option value="Approved">Approved</option>
         <option value="Rejected">Rejected</option>
       </select>
-      <button class="btn btn-new btn-sm" onclick="openForm()">+ New Idea</button>
+      <button class="btn btn-new btn-sm" id="new-idea-btn" onclick="openForm()">+ New Idea</button>
     </div>
     <div class="ideas-grid" id="ideas-grid"></div>
   </div>

@@ -26,6 +26,7 @@ let currentUser       = null;
 let allIdeas          = [];
 let currentDetailIdea = null;
 let ideasChannel      = null;
+let activeTab         = 'all'; // 'all' | 'approved'
 
 // ===================== THEME =====================
 function applyTheme(theme) {
@@ -130,11 +131,30 @@ window.togglePassword = function(inputId, btn) {
   else { input.type = 'password'; btn.textContent = 'show'; }
 };
 
-// ===================== DASHBOARD =====================
+// ===================== TAB SWITCHING =====================
+window.switchTab = function(tab) {
+  activeTab = tab;
+  document.querySelectorAll('.nav-tab').forEach(el => {
+    el.classList.toggle('active', el.dataset.tab === tab);
+  });
+  // Show/hide the "+ New Idea" button — only on the all-ideas tab
+  const newBtn = document.getElementById('new-idea-btn');
+  if (newBtn) newBtn.style.display = tab === 'all' ? '' : 'none';
+  renderIdeas();
+};
+
+
 function showDashboard() {
   showView('dashboard-view');
   const email = currentUser?.email || currentUser?.user_metadata?.full_name || '';
   document.getElementById('user-display').textContent = email;
+  // Reset to all-ideas tab
+  activeTab = 'all';
+  document.querySelectorAll('.nav-tab').forEach(el => {
+    el.classList.toggle('active', el.dataset.tab === 'all');
+  });
+  const newBtn = document.getElementById('new-idea-btn');
+  if (newBtn) newBtn.style.display = '';
   fetchAndRenderIdeas();
   subscribeToRealtime();
 }
@@ -361,6 +381,12 @@ function renderIdeas() {
   const statusFilter = document.getElementById('status-filter')?.value || 'All';
 
   let filtered = [...allIdeas];
+
+  // Tab filter: approved tab shows only AI-approved ideas
+  if (activeTab === 'approved') {
+    filtered = filtered.filter(i => i.ai_status === 'Approved' || i.status === 'Approved');
+  }
+
   if (statusFilter !== 'All') filtered = filtered.filter(i => i.status === statusFilter);
   if (searchTerm.trim()) {
     filtered = filtered.filter(i =>
@@ -371,7 +397,10 @@ function renderIdeas() {
   }
 
   if (filtered.length === 0) {
-    grid.innerHTML = `<div class="empty-state">✨ No ideas found. Create one!</div>`;
+    const msg = activeTab === 'approved'
+      ? '✦ No AI-approved ideas yet. Rate some ideas first!'
+      : '✨ No ideas found. Create one!';
+    grid.innerHTML = `<div class="empty-state">${msg}</div>`;
     return;
   }
 
@@ -788,3 +817,4 @@ window.toggleEditMode = toggleEditMode;
 window.discardEdit    = discardEdit;
 window.saveEdit       = saveEdit;
 window.reRateIdea     = reRateIdea;
+window.switchTab      = switchTab;
