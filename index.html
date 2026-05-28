@@ -94,7 +94,8 @@
       <div class="topbar-logo">idea<span>flow</span></div>
       <nav class="topbar-nav">
         <button class="nav-tab active" data-tab="all" onclick="switchTab('all')">All Ideas</button>
-        <button class="nav-tab" data-tab="approved" onclick="switchTab('approved')">✦ AI Approved</button>
+        <button class="nav-tab" data-tab="approved" onclick="switchTab('approved')">⚙ In Progress</button>
+        <button class="nav-tab nav-tab--digi" id="digi-tab" data-tab="digi" onclick="switchTab('digi')" style="display:none">⚑ Digi Queue</button>
       </nav>
     </div>
     <div class="topbar-right">
@@ -107,9 +108,13 @@
     <div class="controls">
       <input type="text" id="search" placeholder="Search ideas or author…" oninput="renderIdeas()">
       <select id="status-filter" onchange="renderIdeas()">
-        <option value="All">All Status</option>
-        <option value="Pending">Pending</option>
-        <option value="Approved">Approved</option>
+        <option value="All">All Stages</option>
+        <option value="Submitted">Submitted</option>
+        <option value="AI Review">AI Review</option>
+        <option value="Awaiting Digi Approval">Awaiting Digi Approval</option>
+        <option value="In Development">In Development</option>
+        <option value="Testing">Testing</option>
+        <option value="Implemented">Implemented</option>
         <option value="Rejected">Rejected</option>
       </select>
       <button class="btn btn-new btn-sm" id="new-idea-btn" onclick="openForm()">+ New Idea</button>

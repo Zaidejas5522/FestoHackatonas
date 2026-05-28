@@ -11,6 +11,45 @@ const AI_SCORE_THRESHOLD = 60;
 //const AI_MODEL    = "gpt-4o-mini";
 //const AI_SCORE_THRESHOLD = 60; // ideas scoring >= this are Approved
 
+// ===================== PIPELINE STAGES =====================
+const PIPELINE_STAGES = [
+  { key: 'Submitted',              label: 'Submitted',          icon: '✦', color: 'stage-submitted'   },
+  { key: 'AI Review',              label: 'AI Review',          icon: '⟳', color: 'stage-review'      },
+  { key: 'Awaiting Digi Approval', label: 'Digi Approval',      icon: '⚑', color: 'stage-digi'        },
+  { key: 'In Development',         label: 'In Development',     icon: '⚙', color: 'stage-development' },
+  { key: 'Testing',                label: 'Testing',            icon: '⚗', color: 'stage-testing'     },
+  { key: 'Implemented',            label: 'Implemented',        icon: '★', color: 'stage-implemented' },
+  { key: 'Rejected',               label: 'Rejected',           icon: '✗', color: 'stage-rejected'    },
+];
+
+// ===================== DIGI DRIVER ROLE =====================
+// Add the Digi Driver email(s) here. Anyone in this list gets the approval queue.
+const DIGI_DRIVER_EMAILS = [
+  'digidriver@festo.com',   // ← replace with the real Digi Driver email
+  // 'another@festo.com',   // add more if needed
+];
+
+function isDigiDriver() {
+  const email = currentUser?.email || '';
+  return DIGI_DRIVER_EMAILS.includes(email.toLowerCase());
+}
+
+function getStageIndex(status) {
+  const idx = PIPELINE_STAGES.findIndex(s => s.key === status);
+  return idx === -1 ? 0 : idx;
+}
+
+function getStageInfo(status) {
+  return PIPELINE_STAGES.find(s => s.key === status) || PIPELINE_STAGES[0];
+}
+
+function getNextStage(status) {
+  if (status === 'Rejected' || status === 'Implemented') return null;
+  const activeStages = PIPELINE_STAGES.filter(s => s.key !== 'Rejected');
+  const idx = activeStages.findIndex(s => s.key === status);
+  return idx !== -1 && idx < activeStages.length - 1 ? activeStages[idx + 1] : null;
+}
+
 // ===================== SUPABASE CLIENT =====================
 let supabaseClient = null;
 try {
@@ -137,17 +176,20 @@ window.switchTab = function(tab) {
   document.querySelectorAll('.nav-tab').forEach(el => {
     el.classList.toggle('active', el.dataset.tab === tab);
   });
-  // Show/hide the "+ New Idea" button — only on the all-ideas tab
   const newBtn = document.getElementById('new-idea-btn');
   if (newBtn) newBtn.style.display = tab === 'all' ? '' : 'none';
   renderIdeas();
 };
 
-
 function showDashboard() {
   showView('dashboard-view');
   const email = currentUser?.email || currentUser?.user_metadata?.full_name || '';
   document.getElementById('user-display').textContent = email;
+
+  // Show/hide Digi Driver tab based on role
+  const digiTab = document.getElementById('digi-tab');
+  if (digiTab) digiTab.style.display = isDigiDriver() ? '' : 'none';
+
   // Reset to all-ideas tab
   activeTab = 'all';
   document.querySelectorAll('.nav-tab').forEach(el => {
@@ -181,7 +223,7 @@ async function insertIdea(d) {
     standardized_process_score: d.standardized_process_score, digital_input: d.digital_input,
     rule_based: d.rule_based, software_systems: d.software_systems, weekly_hours: d.weekly_hours,
     speed_criticality: d.speed_criticality, test_data_available: d.test_data_available,
-    process_documented: d.process_documented, status: 'Pending'
+    process_documented: d.process_documented, status: 'Submitted'
   };
   const { data, error } = await supabaseClient.from('automation_ideas').insert([row]).select();
   if (error) throw error;
@@ -190,7 +232,12 @@ async function insertIdea(d) {
 
 async function updateIdeaStatus(ideaId, newStatus) {
   if (!supabaseClient) throw new Error("No client");
-  const { error } = await supabaseClient.from('automation_ideas').update({ status: newStatus }).eq('id', ideaId);
+  // stage_updated_at is optional — add the column with: ALTER TABLE automation_ideas ADD COLUMN stage_updated_at timestamptz;
+  const updates = { status: newStatus };
+  try { updates.stage_updated_at = new Date().toISOString(); } catch(e) {}
+  const { error } = await supabaseClient.from('automation_ideas')
+    .update(updates)
+    .eq('id', ideaId);
   if (error) throw error;
   await fetchAndRenderIdeas();
   if (currentDetailIdea && currentDetailIdea.id === ideaId) {
@@ -289,6 +336,8 @@ async function rateIdeaWithAI(idea, { showLoading = false } = {}) {
 
     const safeScore    = Math.max(0, Math.min(100, Math.round(score)));
     const safeDecision = decision === 'Approved' ? 'Approved' : 'Rejected';
+    // AI passes → goes to Digi Driver queue; AI rejects → Rejected
+    const newStatus = safeDecision === 'Approved' ? 'Awaiting Digi Approval' : 'Rejected';
 
     // Write back to Supabase — update ai fields AND status
     await supabaseClient
@@ -297,7 +346,8 @@ async function rateIdeaWithAI(idea, { showLoading = false } = {}) {
         ai_score: safeScore, 
         ai_summary: summary, 
         ai_status: safeDecision, 
-        status: safeDecision 
+        status: newStatus,
+        stage_updated_at: new Date().toISOString()
       })
       .eq('id', idea.id);
 
@@ -309,7 +359,7 @@ async function rateIdeaWithAI(idea, { showLoading = false } = {}) {
         ai_score: safeScore, 
         ai_summary: summary, 
         ai_status: safeDecision, 
-        status: safeDecision 
+        status: newStatus
       };
     }
     if (currentDetailIdea && currentDetailIdea.id === idea.id) {
@@ -318,7 +368,7 @@ async function rateIdeaWithAI(idea, { showLoading = false } = {}) {
         ai_score: safeScore, 
         ai_summary: summary, 
         ai_status: safeDecision, 
-        status: safeDecision 
+        status: newStatus
       };
     }
 
@@ -382,9 +432,11 @@ function renderIdeas() {
 
   let filtered = [...allIdeas];
 
-  // Tab filter: approved tab shows only AI-approved ideas
+  // Tab filter
   if (activeTab === 'approved') {
-    filtered = filtered.filter(i => i.ai_status === 'Approved' || i.status === 'Approved');
+    filtered = filtered.filter(i => i.status === 'In Development' || i.status === 'Testing' || i.status === 'Implemented');
+  } else if (activeTab === 'digi') {
+    filtered = filtered.filter(i => i.status === 'Awaiting Digi Approval');
   }
 
   if (statusFilter !== 'All') filtered = filtered.filter(i => i.status === statusFilter);
@@ -398,7 +450,9 @@ function renderIdeas() {
 
   if (filtered.length === 0) {
     const msg = activeTab === 'approved'
-      ? '✦ No AI-approved ideas yet. Rate some ideas first!'
+      ? '⚙ No ideas currently in development or implemented yet.'
+      : activeTab === 'digi'
+      ? '⚑ No ideas awaiting your approval right now.'
       : '✨ No ideas found. Create one!';
     grid.innerHTML = `<div class="empty-state">${msg}</div>`;
     return;
@@ -409,6 +463,7 @@ function renderIdeas() {
     const scoreBadge = hasScore
       ? `<div class="ai-score-badge ${aiScoreColor(idea.ai_score)}">${idea.ai_score}%</div>`
       : `<div class="ai-score-badge ai-pending">Not rated</div>`;
+    const stage = getStageInfo(idea.status);
 
     return `
       <div class="idea-card" data-id="${idea.id}" onclick="showDetailById('${idea.id}')">
@@ -435,7 +490,7 @@ function renderIdeas() {
           ${escapeHtml(idea.software_systems || '—')} systems • ${new Date(idea.created_at).toLocaleDateString()}
         </div>
         <div class="card-footer-row">
-          <span class="badge badge-${idea.status}">${idea.status}</span>
+          <span class="stage-badge ${stage.color}">${stage.icon} ${stage.label}</span>
           ${idea.ai_status ? `<span class="ai-decision-label ai-decision--${idea.ai_status.toLowerCase()}">AI: ${idea.ai_status}</span>` : ''}
         </div>
       </div>
@@ -505,7 +560,7 @@ function renderDetail(idea) {
     <div class="detail-title" id="d-title">${escapeHtml(idea.automation_name || '—')}</div>
     <div class="detail-author" id="d-author-disp">Submitted by ${escapeHtml(idea.idea_author || 'Anonymous')}</div>
     <div class="detail-badges">
-      <span class="badge badge-${idea.status}" id="d-badge">${idea.status}</span>
+      <span class="stage-badge ${getStageInfo(idea.status).color}" id="d-badge">${getStageInfo(idea.status).icon} ${idea.status}</span>
       ${idea.ai_score != null ? `<span class="badge-ai-score ${aiScoreColor(idea.ai_score)}">${idea.ai_score}% AI Score</span>` : ''}
     </div>
 
@@ -630,10 +685,77 @@ function renderDetail(idea) {
       ${aiSection}
     </div>
 
+    <!-- ── PIPELINE STEPPER ── -->
+    <div class="pipeline-section">
+      <div class="section-heading">§6 — Pipeline Stage</div>
+      <div class="pipeline-stepper">
+        ${PIPELINE_STAGES.filter(s => s.key !== 'Rejected').map((stage, idx) => {
+          const currentIdx = getStageIndex(idea.status === 'Rejected' ? 'Rejected' : idea.status);
+          const rejectedActive = idea.status === 'Rejected';
+          const isComplete = !rejectedActive && idx < currentIdx;
+          const isActive   = !rejectedActive && idx === currentIdx;
+          return `
+            <div class="pipeline-step ${isComplete ? 'complete' : ''} ${isActive ? 'active' : ''}">
+              <div class="pipeline-step-dot">${isComplete ? '✓' : stage.icon}</div>
+              <div class="pipeline-step-label">${stage.label}</div>
+            </div>
+            ${idx < PIPELINE_STAGES.filter(s => s.key !== 'Rejected').length - 1
+              ? `<div class="pipeline-connector ${isComplete ? 'complete' : ''}"></div>`
+              : ''}
+          `;
+        }).join('')}
+      </div>
+      ${idea.status === 'Rejected' ? `
+        <div class="pipeline-rejected-note">✗ This idea was rejected${idea.ai_status === 'Rejected' ? ' by AI scoring' : ''}.
+          ${idea.digi_note ? `<span class="digi-note-inline">Digi note: "${escapeHtml(idea.digi_note)}"</span>` : ''}
+        </div>
+      ` : ''}
+
+      ${idea.status === 'Awaiting Digi Approval' ? `
+        ${isDigiDriver() ? `
+          <div class="digi-approval-box">
+            <div class="digi-approval-label">⚑ Digi Driver Decision</div>
+            <textarea id="digi-note-input" placeholder="Optional note for the submitter…" rows="2"></textarea>
+            <div class="digi-approval-actions">
+              <button class="btn-advance" onclick="digiApprove('${idea.id}')">✓ Approve for Development</button>
+              <button class="btn-reject-stage" onclick="digiReject('${idea.id}')">✗ Reject</button>
+            </div>
+          </div>
+        ` : `
+          <div class="digi-waiting-notice">
+            <span class="digi-waiting-icon">⚑</span>
+            <span>Awaiting approval from the Digi Community Driver.</span>
+          </div>
+        `}
+      ` : `
+        <div class="pipeline-actions">
+          ${(() => {
+            const next = getNextStage(idea.status);
+            // Regular users cannot advance past Awaiting Digi Approval — handled above
+            if (next && next.key !== 'Awaiting Digi Approval') return `
+              <button class="btn-advance" onclick="changeStatus('${idea.id}', '${next.key}')">
+                ${next.icon} Advance to ${next.label} →
+              </button>`;
+            if (idea.status === 'Implemented') return `
+              <div class="pipeline-complete-badge">★ Fully Implemented</div>`;
+            return '';
+          })()}
+          ${idea.status !== 'Rejected' && idea.status !== 'Implemented' && idea.status !== 'Awaiting Digi Approval' ? `
+            <button class="btn-reject-stage" onclick="changeStatus('${idea.id}', 'Rejected')">✗ Reject</button>
+          ` : ''}
+          ${idea.status === 'Rejected' ? `
+            <button class="btn-advance" onclick="changeStatus('${idea.id}', 'Submitted')">↩ Reopen</button>
+          ` : ''}
+        </div>
+      `}
+
+      ${idea.digi_note && idea.status !== 'Rejected' ? `
+        <div class="digi-note-display">⚑ Digi note: "${escapeHtml(idea.digi_note)}"</div>
+      ` : ''}
+    </div>
+
     <div class="detail-actions" id="d-actions">
       <button class="btn-edit" id="edit-btn" onclick="toggleEditMode()">✎ Edit</button>
-      ${idea.status !== 'Approved' ? `<button class="btn btn-approve btn-sm" onclick="changeStatus('${idea.id}', 'Approved')">✓ Approve</button>` : ''}
-      ${idea.status !== 'Rejected' ? `<button class="btn btn-reject btn-sm" onclick="changeStatus('${idea.id}', 'Rejected')">✗ Reject</button>` : ''}
     </div>
   `;
 }
@@ -698,6 +820,49 @@ window.saveEdit = async function() {
 window.changeStatus = async function(ideaId, newStatus) {
   try { await updateIdeaStatus(ideaId, newStatus); }
   catch(err) { console.error("Status update error", err); alert("Failed to update status. Check console."); }
+};
+
+// ===================== DIGI DRIVER ACTIONS =====================
+window.digiApprove = async function(ideaId) {
+  const note = document.getElementById('digi-note-input')?.value.trim() || null;
+  const btn = document.querySelector('.digi-approval-actions .btn-advance');
+  if (btn) { btn.disabled = true; btn.textContent = 'Approving…'; }
+  try {
+    const updates = { status: 'In Development', digi_approved_by: currentUser.email };
+    if (note) updates.digi_note = note;
+    const { error } = await supabaseClient.from('automation_ideas').update(updates).eq('id', ideaId);
+    if (error) throw error;
+    if (currentDetailIdea && currentDetailIdea.id === ideaId) {
+      currentDetailIdea = { ...currentDetailIdea, ...updates };
+    }
+    await fetchAndRenderIdeas();
+    renderDetail(currentDetailIdea);
+  } catch(err) {
+    console.error('Digi approve error', err);
+    alert('Failed to approve: ' + (err.message || 'unknown'));
+    if (btn) { btn.disabled = false; btn.textContent = '✓ Approve for Development'; }
+  }
+};
+
+window.digiReject = async function(ideaId) {
+  const note = document.getElementById('digi-note-input')?.value.trim() || null;
+  const btn = document.querySelector('.digi-approval-actions .btn-reject-stage');
+  if (btn) { btn.disabled = true; btn.textContent = 'Rejecting…'; }
+  try {
+    const updates = { status: 'Rejected', digi_approved_by: currentUser.email };
+    if (note) updates.digi_note = note;
+    const { error } = await supabaseClient.from('automation_ideas').update(updates).eq('id', ideaId);
+    if (error) throw error;
+    if (currentDetailIdea && currentDetailIdea.id === ideaId) {
+      currentDetailIdea = { ...currentDetailIdea, ...updates };
+    }
+    await fetchAndRenderIdeas();
+    renderDetail(currentDetailIdea);
+  } catch(err) {
+    console.error('Digi reject error', err);
+    alert('Failed to reject: ' + (err.message || 'unknown'));
+    if (btn) { btn.disabled = false; btn.textContent = '✗ Reject'; }
+  }
 };
 
 // ===================== MODAL & FORM =====================
@@ -818,3 +983,5 @@ window.discardEdit    = discardEdit;
 window.saveEdit       = saveEdit;
 window.reRateIdea     = reRateIdea;
 window.switchTab      = switchTab;
+window.digiApprove    = digiApprove;
+window.digiReject     = digiReject;
