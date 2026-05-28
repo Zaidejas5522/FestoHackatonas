@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IdeaFlow | Powered by Supabase</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<!-- Supabase JS Client -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0c0c0f;
+    --surface: #141418;
+    --surface2: #1c1c22;
+    --border: #2a2a35;
+    --accent: #c8f74a;
+    --accent2: #7b61ff;
+    --text: #e8e8f0;
+    --muted: #6b6b80;
+    --pending: #f7c948;
+    --approved: #4af78e;
+    --rejected: #f7614a;
+    --card-hover: #1e1e26;
+  }
+
+  body {
+    font-family: 'DM Mono', monospace;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── LOGIN ─────────────────────────────────── */
+  #login-view {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  #login-view::before {
+    content: '';
+    position: absolute;
+    width: 600px; height: 600px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(200,247,74,.12) 0%, transparent 70%);
+    top: -200px; left: -200px;
+    pointer-events: none;
+  }
+
+  #login-view::after {
+    content: '';
+    position: absolute;
+    width: 400px; height: 400px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(123,97,255,.1) 0%, transparent 70%);
+    bottom: -100px; right: -100px;
+    pointer-events: none;
+  }
+
+  .login-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 52px 48px;
+    width: 420px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .login-logo {
+    font-family: 'Syne', sans-serif;
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: -1px;
+    margin-bottom: 8px;
+  }
+
+  .login-logo span { color: var(--accent); }
+
+  .login-sub {
+    color: var(--muted);
+    font-size: 12px;
+    margin-bottom: 40px;
+    letter-spacing: .05em;
+  }
+
+  label {
+    display: block;
+    font-size: 11px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+
+  input[type="text"], textarea, select {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    padding: 12px 14px;
+    outline: none;
+    transition: border-color .2s;
+    margin-bottom: 20px;
+  }
+
+  input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+  select option { background: var(--surface2); }
+  textarea { resize: vertical; min-height: 90px; }
+
+  .btn {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    padding: 12px 22px;
+    transition: transform .15s, opacity .15s;
+  }
+
+  .btn:active { transform: scale(.97); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+
+  .btn-primary {
+    background: var(--accent);
+    color: #0c0c0f;
+    width: 100%;
+    padding: 14px;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+  }
+
+  .btn-primary:hover:not(:disabled) { opacity: .88; }
+
+  /* Microsoft logo mark */
+  .ms-logo {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+  }
+  .ms-logo span { display: block; }
+  .ms-logo span:nth-child(1) { background: #f25022; }
+  .ms-logo span:nth-child(2) { background: #7fba00; }
+  .ms-logo span:nth-child(3) { background: #00a4ef; }
+  .ms-logo span:nth-child(4) { background: #ffb900; }
+
+  .btn-sm {
+    font-size: 11px;
+    padding: 8px 14px;
+    border-radius: 6px;
+  }
+
+  .btn-approve { background: var(--approved); color: #0c0c0f; }
+  .btn-reject  { background: var(--rejected); color: #fff; }
+  .btn-back    { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-approve:hover, .btn-reject:hover, .btn-back:hover { opacity: .82; }
+
+  #login-status {
+    margin-top: 14px;
+    font-size: 11px;
+    color: var(--muted);
+    text-align: center;
+    min-height: 16px;
+    letter-spacing: .04em;
+  }
+
+  /* ── DASHBOARD ──────────────────────────────── */
+  #dashboard-view { display: none; min-height: 100vh; }
+
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 36px;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    background: rgba(12,12,15,.92);
+    backdrop-filter: blur(12px);
+    z-index: 100;
+  }
+
+  .topbar-logo {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 20px;
+    letter-spacing: -0.5px;
+  }
+
+  .topbar-logo span { color: var(--accent); }
+
+  .topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .topbar-user {
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: .06em;
+  }
+
+  .topbar-user strong { color: var(--text); }
+
+  .btn-logout {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 10px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 600;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: color .2s, border-color .2s;
+  }
+
+  .btn-logout:hover { color: var(--text); border-color: var(--text); }
+
+  .dashboard-body { padding: 36px; }
+
+  .controls {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 32px;
+    flex-wrap: wrap;
+  }
+
+  #search { flex: 1; min-width: 180px; margin: 0; }
+  #status-filter { width: 160px; margin: 0; }
+
+  .btn-new { background: var(--accent); color: #0c0c0f; white-space: nowrap; }
+  .btn-new:hover { opacity: .85; }
+
+  .ideas-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+  }
+
+  .idea-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 22px 24px;
+    cursor: pointer;
+    transition: background .2s, border-color .2s, transform .15s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .idea-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: var(--accent2);
+    opacity: 0;
+    transition: opacity .2s;
+  }
+
+  .idea-card:hover { background: var(--card-hover); border-color: #3a3a48; transform: translateY(-2px); }
+  .idea-card:hover::before { opacity: 1; }
+
+  .card-title {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 15px;
+    margin-bottom: 10px;
+    line-height: 1.3;
+  }
+
+  .card-meta {
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: .04em;
+    margin-bottom: 14px;
+  }
+
+  .badge {
+    display: inline-block;
+    font-size: 10px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 4px;
+  }
+
+  .badge-Pending  { background: rgba(247,201,72,.15);  color: var(--pending); }
+  .badge-Approved { background: rgba(74,247,142,.15);  color: var(--approved); }
+  .badge-Rejected { background: rgba(247,97,74,.15);   color: var(--rejected); }
+
+  .empty-state {
+    grid-column: 1 / -1;
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    padding: 60px 0;
+    letter-spacing: .04em;
+  }
+
+  /* ── DETAIL ─────────────────────────────────── */
+  #detail-view { display: none; min-height: 100vh; }
+
+  .detail-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 36px;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    background: rgba(12,12,15,.92);
+    backdrop-filter: blur(12px);
+    z-index: 100;
+  }
+
+  .detail-body {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 48px 36px;
+  }
+
+  .detail-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 26px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    margin-bottom: 16px;
+    line-height: 1.25;
+  }
+
+  .detail-badges { margin-bottom: 32px; display: flex; gap: 10px; flex-wrap: wrap; }
+
+  .detail-section { margin-bottom: 20px; }
+
+  .detail-label {
+    font-size: 10px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+
+  .detail-value { font-size: 14px; line-height: 1.6; }
+
+  .divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 28px 0;
+  }
+
+  .detail-actions { display: flex; gap: 12px; margin-top: 36px; }
+
+  /* ── MODAL ──────────────────────────────────── */
+  #modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.65);
+    backdrop-filter: blur(4px);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+  }
+
+  #modal-overlay.open { display: flex; }
+
+  .modal-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 40px;
+    width: 480px;
+    max-width: 94vw;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+
+  .modal-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 20px;
+    font-weight: 800;
+    margin-bottom: 28px;
+    letter-spacing: -0.3px;
+  }
+
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 4px; }
+
+  .btn-cancel { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
+  .btn-submit { background: var(--accent); color: #0c0c0f; }
+  .btn-cancel:hover { color: var(--text); }
+  .btn-submit:hover:not(:disabled) { opacity: .85; }
+</style>
+</head>
+<body>
+
+<!-- ── LOGIN ───────────────────────────────────────── -->
+<div id="login-view">
+  <div class="login-box">
+    <div class="login-logo">idea<span>flow</span></div>
+    <div class="login-sub">Sign in with demo / email to continue (Supabase)</div>
+    <input type="text" id="demo-email" placeholder="your.email@company.com" style="margin-bottom: 16px;" value="demo@example.com">
+    <button class="btn btn-primary" onclick="handleDemoLogin()">
+      <span class="ms-logo">
+        <span></span><span></span><span></span><span></span>
+      </span>
+      Continue with Email
+    </button>
+    <div id="login-status"></div>
+  </div>
+</div>
+
+<!-- ── DASHBOARD ────────────────────────────────────── -->
+<div id="dashboard-view">
+  <div class="topbar">
+    <div class="topbar-logo">idea<span>flow</span></div>
+    <div class="topbar-right">
+      <div class="topbar-user">logged in as <strong id="user-display"></strong></div>
+      <button class="btn-logout" onclick="handleLogout()">Sign out</button>
+    </div>
+  </div>
+  <div class="dashboard-body">
+    <div class="controls">
+      <input type="text" id="search" placeholder="Search ideas…" oninput="renderIdeas()">
+      <select id="status-filter" onchange="renderIdeas()">
+        <option value="All">All Status</option>
+        <option value="Pending">Pending</option>
+        <option value="Approved">Approved</option>
+        <option value="Rejected">Rejected</option>
+      </select>
+      <button class="btn btn-new btn-sm" onclick="openForm()">+ New Idea</button>
+    </div>
+    <div class="ideas-grid" id="ideas-grid"></div>
+  </div>
+</div>
+
+<!-- ── DETAIL ───────────────────────────────────────── -->
+<div id="detail-view">
+  <div class="detail-topbar">
+    <button class="btn btn-back btn-sm" onclick="showDashboard()">← Back</button>
+    <div style="font-size:12px;color:var(--muted);letter-spacing:.06em;">IDEA DETAIL</div>
+  </div>
+  <div class="detail-body" id="detail-body"></div>
+</div>
+
+<!-- ── MODAL ────────────────────────────────────────── -->
+<div id="modal-overlay">
+  <div class="modal-box">
+    <div class="modal-title">New Idea</div>
+    <label>Title</label>
+    <input type="text" id="f-title" placeholder="Give your idea a title">
+    <label>Description</label>
+    <textarea id="f-desc" placeholder="Describe your idea…"></textarea>
+    <label>Department</label>
+    <select id="f-dept">
+      <option value="">Select department</option>
+      <option>Engineering</option>
+      <option>Product</option>
+      <option>Operations</option>
+      <option>Marketing</option>
+      <option>Finance</option>
+      <option>HR</option>
+    </select>
+    <label>Benefit Type</label>
+    <select id="f-benefit">
+      <option value="">Select benefit</option>
+      <option>Cost Reduction</option>
+      <option>Revenue Growth</option>
+      <option>Efficiency</option>
+      <option>Customer Experience</option>
+      <option>Employee Wellbeing</option>
+    </select>
+    <div class="modal-actions">
+      <button class="btn btn-cancel btn-sm" onclick="closeForm()">Cancel</button>
+      <button class="btn btn-submit btn-sm" onclick="submitIdea()">Submit Idea</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ===================== CONFIGURATION =====================
+  // 🔁 REPLACE WITH YOUR SUPABASE CREDENTIALS (hackathon ready)
+  const SUPABASE_URL = "https://qgtwismenwfiipmvkjcm.supabase.co";    // <-- UPDATE THIS
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFndHdpc21lbndmaWlwbXZramNtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5NzYxMDQsImV4cCI6MjA5NTU1MjEwNH0.iqrPgymdol7Z8gzPQF3H84nWRM79Nm8vzo9RMo4GpAI";                 // <-- UPDATE THIS
+  
+  // ===================== SUPABASE CLIENT =====================
+  let supabaseClient = null;
+  try {
+    if (typeof supabase !== 'undefined' && supabase.createClient) {
+      supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    } else {
+      console.error("Supabase library not loaded");
+    }
+  } catch(e) { console.error(e); }
+  
+  // ===================== APP STATE =====================
+  let currentUser = null;          // { email: string }
+  let allIdeas = [];               // cached ideas from supabase
+  let currentDetailIdea = null;
+  let ideasChannel = null;         // realtime subscription handle
+  
+  // ===================== HELPER: UI TOGGLES =====================
+  function showDashboard() {
+    document.getElementById('login-view').style.display = 'none';
+    document.getElementById('dashboard-view').style.display = 'block';
+    document.getElementById('detail-view').style.display = 'none';
+    if (currentUser) {
+      document.getElementById('user-display').innerText = currentUser.email;
+    }
+    fetchAndRenderIdeas();         // load from Supabase
+    subscribeToRealtime();         // enable realtime updates
+  }
+  
+  function showLogin() {
+    if (ideasChannel) supabaseClient.removeChannel(ideasChannel);
+    document.getElementById('login-view').style.display = 'flex';
+    document.getElementById('dashboard-view').style.display = 'none';
+    document.getElementById('detail-view').style.display = 'none';
+    document.getElementById('login-status').innerText = '';
+  }
+  
+  function showDetail(idea) {
+    currentDetailIdea = idea;
+    document.getElementById('login-view').style.display = 'none';
+    document.getElementById('dashboard-view').style.display = 'none';
+    document.getElementById('detail-view').style.display = 'block';
+    renderDetail(idea);
+  }
+  
+  // ===================== SUPABASE CRUD OPERATIONS =====================
+  async function fetchIdeasFromDB() {
+    if (!supabaseClient || !currentUser) return [];
+    const { data, error } = await supabaseClient
+      .from('ideas')
+      .select('*')
+      .order('created_at', { ascending: false });  // newest first
+    if (error) {
+      console.error("Fetch error:", error);
+      return [];
+    }
+    return data || [];
+  }
+  
+  async function fetchAndRenderIdeas() {
+    if (!currentUser) return;
+    const ideas = await fetchIdeasFromDB();
+    allIdeas = ideas;
+    renderIdeas();
+  }
+  
+  // Insert new idea
+  async function insertIdea(ideaData) {
+    if (!supabaseClient || !currentUser) throw new Error("Not authenticated");
+    const newIdea = {
+      title: ideaData.title,
+      description: ideaData.description,
+      department: ideaData.department,
+      benefit_type: ideaData.benefit_type,
+      status: "Pending",
+      submitter_email: currentUser.email,
+      created_at: new Date().toISOString()
+    };
+    const { data, error } = await supabaseClient
+      .from('ideas')
+      .insert([newIdea])
+      .select();
+    if (error) throw error;
+    return data[0];
+  }
+  
+  // Update status
+  async function updateIdeaStatus(ideaId, newStatus) {
+    if (!supabaseClient) throw new Error("No client");
+    const { error } = await supabaseClient
+      .from('ideas')
+      .update({ status: newStatus })
+      .eq('id', ideaId);
+    if (error) throw error;
+    // after update, refresh list
+    await fetchAndRenderIdeas();
+    // if detail view is open and matches, update local detail object
+    if (currentDetailIdea && currentDetailIdea.id === ideaId) {
+      currentDetailIdea.status = newStatus;
+      renderDetail(currentDetailIdea);
+    }
+  }
+  
+  // Realtime subscription (optional but adds nice live feel)
+  function subscribeToRealtime() {
+    if (!supabaseClient || !currentUser) return;
+    // remove existing channel if any
+    if (ideasChannel) {
+      supabaseClient.removeChannel(ideasChannel);
+    }
+    ideasChannel = supabaseClient
+      .channel('ideas-changes')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'ideas' }, 
+        (payload) => {
+          // Real-time update: simply refetch ideas (simple & reliable for MVP)
+          fetchAndRenderIdeas();
+          // Also if detail view shows the changed idea, refresh detail
+          if (currentDetailIdea && payload.new && currentDetailIdea.id === payload.new.id) {
+            currentDetailIdea = payload.new;
+            renderDetail(currentDetailIdea);
+          } else if (payload.old && currentDetailIdea && currentDetailIdea.id === payload.old.id) {
+            // handle delete? not needed for status updates, but for safety fetch again
+            fetchAndRenderIdeas();
+          }
+        })
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') console.log("[realtime] listening to ideas");
+      });
+  }
+  
+  // ===================== RENDER LOGIC (CLIENT SIDE FILTER + SEARCH) =====================
+  function renderIdeas() {
+    const grid = document.getElementById('ideas-grid');
+    if (!grid) return;
+    const searchTerm = document.getElementById('search')?.value.toLowerCase() || '';
+    const statusFilter = document.getElementById('status-filter')?.value || 'All';
+    
+    let filtered = [...allIdeas];
+    if (statusFilter !== 'All') {
+      filtered = filtered.filter(idea => idea.status === statusFilter);
+    }
+    if (searchTerm.trim() !== '') {
+      filtered = filtered.filter(idea => 
+        idea.title?.toLowerCase().includes(searchTerm) || 
+        idea.description?.toLowerCase().includes(searchTerm)
+      );
+    }
+    
+    if (filtered.length === 0) {
+      grid.innerHTML = `<div class="empty-state">✨ No ideas found. Create one!</div>`;
+      return;
+    }
+    
+    grid.innerHTML = filtered.map(idea => `
+      <div class="idea-card" onclick="showDetailById('${idea.id}')">
+        <div class="card-title">${escapeHtml(idea.title)}</div>
+        <div class="card-meta">
+          ${escapeHtml(idea.department || 'General')} • ${new Date(idea.created_at).toLocaleDateString()}
+        </div>
+        <div><span class="badge badge-${idea.status}">${idea.status}</span></div>
+      </div>
+    `).join('');
+  }
+  
+  async function showDetailById(ideaId) {
+    // find in current cache
+    const idea = allIdeas.find(i => i.id === ideaId);
+    if (idea) {
+      showDetail(idea);
+    } else {
+      // fallback direct fetch
+      if (supabaseClient) {
+        const { data } = await supabaseClient.from('ideas').select('*').eq('id', ideaId).single();
+        if (data) showDetail(data);
+      }
+    }
+  }
+  
+  function renderDetail(idea) {
+    const container = document.getElementById('detail-body');
+    if (!container) return;
+    container.innerHTML = `
+      <div class="detail-title">${escapeHtml(idea.title)}</div>
+      <div class="detail-badges">
+        <span class="badge badge-${idea.status}">${idea.status}</span>
+      </div>
+      <div class="detail-section">
+        <div class="detail-label">Description</div>
+        <div class="detail-value">${escapeHtml(idea.description) || '—'}</div>
+      </div>
+      <div class="detail-section">
+        <div class="detail-label">Department</div>
+        <div class="detail-value">${escapeHtml(idea.department) || '—'}</div>
+      </div>
+      <div class="detail-section">
+        <div class="detail-label">Benefit Type</div>
+        <div class="detail-value">${escapeHtml(idea.benefit_type) || '—'}</div>
+      </div>
+      <div class="detail-section">
+        <div class="detail-label">Submitted by</div>
+        <div class="detail-value">${escapeHtml(idea.submitter_email)}</div>
+      </div>
+      <div class="detail-section">
+        <div class="detail-label">Created</div>
+        <div class="detail-value">${new Date(idea.created_at).toLocaleString()}</div>
+      </div>
+      <hr class="divider" />
+      <div class="detail-actions">
+        ${idea.status !== 'Approved' ? `<button class="btn btn-approve btn-sm" onclick="changeStatus('${idea.id}', 'Approved')">✓ Approve</button>` : ''}
+        ${idea.status !== 'Rejected' ? `<button class="btn btn-reject btn-sm" onclick="changeStatus('${idea.id}', 'Rejected')">✗ Reject</button>` : ''}
+      </div>
+    `;
+  }
+  
+  window.changeStatus = async function(ideaId, newStatus) {
+    try {
+      await updateIdeaStatus(ideaId, newStatus);
+      // after update we already called fetchAndRenderIdeas, but update detail view if needed
+      const updatedIdea = allIdeas.find(i => i.id === ideaId);
+      if (updatedIdea && currentDetailIdea && currentDetailIdea.id === ideaId) {
+        currentDetailIdea = updatedIdea;
+        renderDetail(updatedIdea);
+      }
+    } catch(err) {
+      console.error("Status update error", err);
+      alert("Failed to update status. Check console.");
+    }
+  };
+  
+  // ===================== MODAL & FORM =====================
+  function openForm() {
+    document.getElementById('modal-overlay').classList.add('open');
+    document.getElementById('f-title').value = '';
+    document.getElementById('f-desc').value = '';
+    document.getElementById('f-dept').value = '';
+    document.getElementById('f-benefit').value = '';
+  }
+  
+  function closeForm() {
+    document.getElementById('modal-overlay').classList.remove('open');
+  }
+  
+  window.submitIdea = async function() {
+    const title = document.getElementById('f-title').value.trim();
+    const description = document.getElementById('f-desc').value.trim();
+    const department = document.getElementById('f-dept').value;
+    const benefit = document.getElementById('f-benefit').value;
+    
+    if (!title) {
+      alert("Title is required");
+      return;
+    }
+    if (!department) {
+      alert("Please select a department");
+      return;
+    }
+    if (!benefit) {
+      alert("Please select a benefit type");
+      return;
+    }
+    
+    const submitBtn = document.querySelector('#modal-overlay .btn-submit');
+    submitBtn.disabled = true;
+    submitBtn.innerText = "Submitting...";
+    
+    try {
+      await insertIdea({
+        title,
+        description,
+        department,
+        benefit_type: benefit
+      });
+      closeForm();
+      await fetchAndRenderIdeas();   // refresh list
+    } catch (err) {
+      console.error("Insert error:", err);
+      alert("Failed to create idea: " + (err.message || "unknown error"));
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.innerText = "Submit Idea";
+    }
+  };
+  
+  // ===================== DEMO / SIMPLE LOGIN (replaces MSAL, using email field) =====================
+  window.handleDemoLogin = function() {
+    const emailInput = document.getElementById('demo-email');
+    let email = emailInput.value.trim();
+    if (!email || !email.includes('@')) {
+      document.getElementById('login-status').innerText = "Please enter a valid email (e.g., name@company.com)";
+      return;
+    }
+    // simple validation
+    currentUser = { email: email };
+    // check Supabase availability
+    if (!supabaseClient) {
+      document.getElementById('login-status').innerText = "⚠️ Supabase client not initialized. Check URL/KEY.";
+      return;
+    }
+    document.getElementById('login-status').innerText = "✓ Signed in. Loading ideas...";
+    setTimeout(() => {
+      showDashboard();
+    }, 100);
+  };
+  
+  window.handleLogout = function() {
+    currentUser = null;
+    allIdeas = [];
+    if (ideasChannel && supabaseClient) {
+      supabaseClient.removeChannel(ideasChannel);
+      ideasChannel = null;
+    }
+    showLogin();
+  };
+  
+  // simple XSS protection
+  function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/[&<>]/g, function(m) {
+      if (m === '&') return '&amp;';
+      if (m === '<') return '&lt;';
+      if (m === '>') return '&gt;';
+      return m;
+    }).replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, function(c) {
+      return c;
+    });
+  }
+  
+  // initial load: show login view, check supabase config hint
+  window.addEventListener('DOMContentLoaded', () => {
+    showLogin();
+    if (!supabaseClient) {
+      document.getElementById('login-status').innerHTML = "⚠️ Supabase client failed. Please set SUPABASE_URL and SUPABASE_ANON_KEY in script (line ~260).";
+    } else {
+      // optional test connection message
+      console.log("Supabase client ready");
+    }
+    // attach global references for modal close (click overlay)
+    const overlay = document.getElementById('modal-overlay');
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeForm();
+    });
+  });
+  
+  // make sure some functions are globally accessible for onclick
+  window.showDashboard = showDashboard;
+  window.openForm = openForm;
+  window.closeForm = closeForm;
+  window.renderIdeas = renderIdeas;
+  window.showDetailById = showDetailById;
+  window.handleLogout = handleLogout;
+  window.handleDemoLogin = handleDemoLogin;
+</script>
+</body>
+</html>
