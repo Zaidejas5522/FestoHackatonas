@@ -203,6 +203,9 @@ function showDashboard() {
   const driverTab = document.getElementById('driver-tab');
   if (driverTab) driverTab.style.display = isDriver() ? '' : 'none';
 
+  const driverNewTab = document.getElementById('driver-new-tab');
+  if (driverNewTab) driverNewTab.style.display = isDriver() ? '' : 'none';
+
   // Reset to all-ideas tab
   activeTab = 'all';
   document.querySelectorAll('.nav-tab').forEach(el => {
@@ -344,10 +347,10 @@ async function rateIdeaWithAI(idea, { showLoading = false } = {}) {
     // Determine status based on score range
     let newStatus;
     let aiDecision; // for display
-    if (safeScore >= 66) {
+    if (safeScore >= 95) {
       newStatus = 'Awaiting Digi Approval';
       aiDecision = 'Approved';
-    } else if (safeScore >= 50 && safeScore <= 65) {
+    } else if (safeScore >= 50 && safeScore <= 94) {
       newStatus = 'Driver Review';
       aiDecision = 'Borderline';
     } else {
@@ -440,9 +443,12 @@ function renderIdeas() {
     filtered = filtered.filter(i => i.status === 'In Development' || i.status === 'Testing' || i.status === 'Implemented');
   } else if (activeTab === 'digi') {
     filtered = filtered.filter(i => i.status === 'Awaiting Digi Approval');
- } else if (activeTab === 'driver') {
+  } else if (activeTab === 'driver') {
   filtered = filtered.filter(i => i.status === 'Driver Review');
-} 
+  }
+   else if (activeTab === 'driver-important') {
+  filtered = filtered.filter(i => i.status === 'Driver Review' && (i.ai_score || 0) >= 70);
+  }
 
   if (statusFilter !== 'All') filtered = filtered.filter(i => i.status === statusFilter);
   if (searchTerm.trim()) {
