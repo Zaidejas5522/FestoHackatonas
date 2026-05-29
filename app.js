@@ -773,14 +773,16 @@ window.showFunnelDetail = async function(ideaId) {
   // Load funnel response if available
   let funnelResponse = null;
   if (supabaseClient) {
-    const { data } = await supabaseClient
+    const { data, error } = await supabaseClient
       .from('funnel_responses')
       .select('*')
       .eq('idea_id', ideaId)
-      .order('created_at', { ascending: false })
       .limit(1);
-    funnelResponse = data?.[0] || null;
+    console.log('[Funnel] response fetch:', data, error);
+    funnelResponse = (data && data.length > 0) ? data[0] : null;
   }
+
+  console.log('[Funnel] rendering with funnelResponse:', funnelResponse);
 
   renderFunnelDetail(idea, funnelResponse);
   showView('funnel-detail-view');
@@ -825,44 +827,39 @@ function renderFunnelDetail(idea, funnelResponse) {
         <div class="detail-label" style="color:#f7c948;">⚑ Note from Digi Driver</div>
         <div class="detail-value" style="color:#f7c948;">${escapeHtml(idea.digi_note)}</div>
       </div>` : ''}
-
-      ${funnelResponse ? `
-      <hr class="divider" />
-      <div class="section-heading">§4 — Funnel Questionnaire Responses</div>
-      <div class="detail-section">
-        <div class="detail-label">Core Business Problem</div>
-        <div class="detail-value">${escapeHtml(funnelResponse.answer_problem) || '—'}</div>
-      </div>
-      <div class="detail-section" style="margin-top:14px;">
-        <div class="detail-label">Expected Outcome</div>
-        <div class="detail-value">${escapeHtml(funnelResponse.answer_outcome) || '—'}</div>
-      </div>
-      <div class="detail-section" style="margin-top:14px;">
-        <div class="detail-label">Priority / Urgency</div>
-        <div class="detail-value">${escapeHtml(funnelResponse.answer_priority) || '—'}</div>
-      </div>` : `
-      <hr class="divider" />
-      <div class="digi-waiting-notice">
-        <span class="digi-waiting-icon">✉</span>
-        <span>Waiting for the creator to complete the Sales Funnel questionnaire.</span>
-      </div>`}
     </div>
 
     <div class="pipeline-section">
       <div class="section-heading">Funnel Decision</div>
-      ${idea.status === 'Funnel Submitted' ? `
-        <div class="digi-approval-box">
-          <div class="digi-approval-label">✉ Funnel Reviewer Decision</div>
+      ${funnelResponse ? `
+        <hr class="divider" />
+        <div class="section-heading">§4 — Funnel Questionnaire Answers</div>
+        <div class="detail-section">
+          <div class="detail-label">1. Core Business Problem</div>
+          <div class="detail-value">${escapeHtml(funnelResponse.answer_problem) || '—'}</div>
+        </div>
+        <div class="detail-section" style="margin-top:14px;">
+          <div class="detail-label">2. Expected Outcome</div>
+          <div class="detail-value">${escapeHtml(funnelResponse.answer_outcome) || '—'}</div>
+        </div>
+        <div class="detail-section" style="margin-top:14px;">
+          <div class="detail-label">3. Priority / Urgency</div>
+          <div class="detail-value">${escapeHtml(funnelResponse.answer_priority) || '—'}</div>
+        </div>
+        <div class="digi-approval-box" style="margin-top:20px;">
+          <div class="digi-approval-label">✉ Your Decision</div>
           <textarea id="funnel-note-input" placeholder="Optional note for the idea creator…" rows="2"></textarea>
           <div class="digi-approval-actions">
             <button class="btn-advance" onclick="funnelApprove('${idea.id}')">✓ Approve for Development</button>
             <button class="btn-reject-stage" onclick="funnelReject('${idea.id}')">✗ Reject</button>
           </div>
-        </div>` : `
+        </div>
+      ` : `
         <div class="digi-waiting-notice">
           <span class="digi-waiting-icon">✉</span>
-          <span>Funnel questionnaire not yet submitted by the creator. Decision will be available once they respond.</span>
-        </div>`}
+          <span>Waiting for the creator to complete the Sales Funnel questionnaire.</span>
+        </div>
+      `}
     </div>
   `;
 }
@@ -1348,7 +1345,7 @@ function renderDetail(idea) {
       <button class="btn-rerate" id="rerate-btn" onclick="reRateIdea('${idea.id}')">
         ${hasAI ? '↻ Re-rate with AI' : '✦ Rate with AI'}
       </button>
-      ${hasAI ? `<span class="ai-powered-label">Powered by OpenAI → FestoGPT</span>` : ''}
+      ${hasAI ? `<span class="ai-powered-label"></span>` : ''}
     </div>
   `;
 
@@ -1493,10 +1490,10 @@ function renderDetail(idea) {
         <div class="digi-funnel-sent" style="background:rgba(200,247,74,.06);border-color:rgba(200,247,74,.25);color:var(--accent);">
           <span class="digi-funnel-sent-icon">↗</span>
           <span>The creator has submitted the Sales Funnel form.
-            ${isDigiDriver() ? `You can now review their responses and approve for development.` : `Awaiting Digi Driver review.`}
+            ${isDigiDriver() ? `Now you have to wait until funnel person reviews the form and approves for development.` : `Awaiting Funnel Person review.`}
           </span>
         </div>
-        ${isDigiDriver() ? `
+        ${isFunnelPerson() ? `
           <div class="pipeline-actions" style="margin-top:12px">
             <button class="btn-advance" onclick="changeStatus('${idea.id}', 'In Development')">✓ Approve for Development</button>
             <button class="btn-reject-stage" onclick="changeStatus('${idea.id}', 'Rejected')">✗ Reject</button>
@@ -1523,7 +1520,6 @@ function renderDetail(idea) {
           </div>
           ${isDigiDriver() ? `
             <div class="pipeline-actions" style="margin-top:12px">
-              <button class="btn-advance" onclick="changeStatus('${idea.id}', 'In Development')">✓ Approve for Development</button>
               <button class="btn-reject-stage" onclick="digiReject('${idea.id}')">✗ Reject</button>
             </div>` : ''}
         `}
