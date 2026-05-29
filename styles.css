@@ -1285,3 +1285,24 @@ body.theme-light .btn-advance { color: #fff; }
   padding: 24px;
   margin-top: 20px;
 }
+
+.stage-consult {
+  background: rgba(123, 97, 255, 0.2);
+  color: #9b82ff;
+}
+.btn-consult {
+  font-family: 'Syne', sans-serif;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  background: transparent;
+  color: #9b82ff;
+  border: 1px solid #9b82ff;
+  border-radius: 8px;
+  padding: 9px 16px;
+  cursor: pointer;
+  transition: background .2s, color .2s;
+}
+.btn-consult:hover:not(:disabled) { background: #9b82ff; color: #fff; }
+.btn-consult:disabled { opacity: .4; cursor: not-allowed; }
