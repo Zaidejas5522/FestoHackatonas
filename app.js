@@ -429,6 +429,27 @@ function emailFunnelSubmitted(idea, answers) {
   };
 }
 
+function emailConsultationRequested(idea, driverNote) {
+  return {
+    subject: `[IdeaFlow] 💬 Driver has a question about your idea: ${idea.automation_name}`,
+    htmlBody: emailBase(`
+      <h2>💬 Consultation Request from Driver</h2>
+      <p>A Driver has reviewed your automation idea and would like to consult with you before making a decision.</p>
+      <div class="idea-box">
+        <div class="label">Idea Name</div>
+        <div class="value">${escapeHtml(idea.automation_name)}</div>
+      </div>
+      ${driverNote ? `
+      <div class="idea-box">
+        <div class="label">Message from Driver</div>
+        <div class="value" style="font-size:13px;font-weight:400;line-height:1.6;color:#f7c948;">${escapeHtml(driverNote)}</div>
+      </div>` : ''}
+      <p>Please log in to IdeaFlow to view your idea and respond to the Driver's query.</p>
+      <a class="btn" href="http://localhost:5500/index.html">↗ Open IdeaFlow</a>
+    `),
+  };
+}
+
 function emailRejected(idea, digiNote, rejectedByAI) {
   const reason = rejectedByAI
     ? 'Your idea was reviewed by the AI scoring system and did not meet the minimum viability threshold.'
@@ -1641,6 +1662,13 @@ window.consultWithDriver = async function(ideaId) {
     const updates = { status: 'Consulting with Driver', driver_note: note, stage_updated_at: new Date().toISOString() };
     const { error } = await supabaseClient.from('automation_ideas').update(updates).eq('id', ideaId);
     if (error) throw error;
+
+    // ── EMAIL TRIGGER: notify creator of consultation request ──
+    const fullIdea = allIdeas.find(i => i.id === ideaId) || currentDetailIdea;
+    if (fullIdea?.submitter_email) {
+      const { subject, htmlBody } = emailConsultationRequested(fullIdea, note);
+      sendFestoEmail({ subject, htmlBody, recipients: [fullIdea.submitter_email] });
+    }
     
     if (currentDetailIdea && currentDetailIdea.id === ideaId) {
       currentDetailIdea = { ...currentDetailIdea, ...updates };
