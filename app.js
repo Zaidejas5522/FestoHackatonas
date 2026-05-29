@@ -28,12 +28,20 @@ const DIGI_DRIVER_EMAILS = [
   'digidriver@festo.com',   // ← replace with the real Digi Driver email
   // 'another@festo.com',   // add more if needed
 ];
+// ===================== DRIVER ROLE =====================
+const DRIVER_EMAILS = [
+  'driver@festo.com',   // ← replace with the real Digi Driver email
+  // 'another@festo.com',   // add more if needed
+];
 
 function isDigiDriver() {
   const email = currentUser?.email || '';
   return DIGI_DRIVER_EMAILS.includes(email.toLowerCase());
 }
-
+function isDriver() {
+  const email = currentUser?.email || '';
+  return DRIVER_EMAILS.includes(email.toLowerCase());
+}
 function getStageIndex(status) {
   const idx = PIPELINE_STAGES.findIndex(s => s.key === status);
   return idx === -1 ? 0 : idx;
