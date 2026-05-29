@@ -17,6 +17,8 @@ const PIPELINE_STAGES = [
   { key: 'AI Review',              label: 'AI Review',          icon: '⟳', color: 'stage-review'      },
   { key: 'Driver Review',          label: 'Driver Review',      icon: '🎯', color: 'stage-driver'     }, 
   { key: 'Awaiting Digi Approval', label: 'Digi Approval',      icon: '⚑', color: 'stage-digi'        },
+  { key: 'Awaiting Funnel Response',label: 'Funnel Response',    icon: '✉', color: 'stage-funnel'      },
+  { key: 'Funnel Submitted',        label: 'Funnel Submitted',   icon: '↗', color: 'stage-funnel-done' },
   { key: 'In Development',         label: 'In Development',     icon: '⚙', color: 'stage-development' },
   { key: 'Testing',                label: 'Testing',            icon: '⚗', color: 'stage-testing'     },
   { key: 'Implemented',            label: 'Implemented',        icon: '★', color: 'stage-implemented' },
@@ -439,10 +441,12 @@ function renderIdeas() {
   if (activeTab === 'approved') {
     filtered = filtered.filter(i => i.status === 'In Development' || i.status === 'Testing' || i.status === 'Implemented');
   } else if (activeTab === 'digi') {
-    filtered = filtered.filter(i => i.status === 'Awaiting Digi Approval');
- } else if (activeTab === 'driver') {
-  filtered = filtered.filter(i => i.status === 'Driver Review');
-} 
+    filtered = filtered.filter(i =>
+      i.status === 'Awaiting Digi Approval' ||
+      i.status === 'Awaiting Funnel Response' ||
+      i.status === 'Funnel Submitted'
+    );
+  }
 
   if (statusFilter !== 'All') filtered = filtered.filter(i => i.status === statusFilter);
   if (searchTerm.trim()) {
@@ -717,6 +721,31 @@ function renderDetail(idea) {
         </div>
       ` : ''}
 
+      ${idea.status === 'Funnel Submitted' ? `
+        <div class="digi-funnel-sent" style="background:rgba(200,247,74,.06);border-color:rgba(200,247,74,.25);color:var(--accent);">
+          <span class="digi-funnel-sent-icon">↗</span>
+          <span>The creator has submitted the Sales Funnel form.
+            ${isDigiDriver() ? `You can now review their responses and approve for development.` : `Awaiting Digi Driver review.`}
+          </span>
+        </div>
+        ${isDigiDriver() ? `
+          <div class="pipeline-actions" style="margin-top:12px">
+            <button class="btn-advance" onclick="changeStatus('${idea.id}', 'In Development')">✓ Approve for Development</button>
+            <button class="btn-reject-stage" onclick="changeStatus('${idea.id}', 'Rejected')">✗ Reject</button>
+          </div>` : ''}
+      ` : idea.status === 'Awaiting Funnel Response' ? `
+        <div class="digi-funnel-sent">
+          <span class="digi-funnel-sent-icon">✉</span>
+          <span>Sales Funnel request sent — waiting for the creator to complete the form.
+            ${isDigiDriver() ? `<br><small style="opacity:.7">Once they submit, you can approve for development.</small>` : ''}
+          </span>
+        </div>
+        ${isDigiDriver() ? `
+          <div class="pipeline-actions" style="margin-top:12px">
+            <button class="btn-advance" onclick="changeStatus('${idea.id}', 'In Development')">✓ Approve for Development</button>
+            <button class="btn-reject-stage" onclick="digiReject('${idea.id}')">✗ Reject</button>
+          </div>` : ''}
+      ` : idea.status === 'Awaiting Digi Approval' ? `
       <!-- DRIVER REVIEW BOX (only for drivers when status is Driver Review) -->
       ${idea.status === 'Driver Review' && isDriver() ? `
         <div class="driver-review-box">
@@ -737,6 +766,7 @@ function renderDetail(idea) {
             <textarea id="digi-note-input" placeholder="Optional note for the submitter…" rows="2"></textarea>
             <div class="digi-approval-actions">
               <button class="btn-advance" onclick="digiApprove('${idea.id}')">✓ Approve for Development</button>
+              <button class="btn-funnel" onclick="digiSendToFunnel('${idea.id}')">↗ Send to Sales Funnel</button>
               <button class="btn-reject-stage" onclick="digiReject('${idea.id}')">✗ Reject</button>
             </div>
           </div>
@@ -754,7 +784,7 @@ function renderDetail(idea) {
           ${(() => {
             const next = getNextStage(idea.status);
             // Regular users cannot advance past Awaiting Digi Approval — handled above
-            if (next && next.key !== 'Awaiting Digi Approval') return `
+            if (next && next.key !== 'Awaiting Digi Approval' && next.key !== 'Awaiting Funnel Response' && next.key !== 'Funnel Submitted') return `
               <button class="btn-advance" onclick="changeStatus('${idea.id}', '${next.key}')">
                 ${next.icon} Advance to ${next.label} →
               </button>`;
@@ -762,6 +792,7 @@ function renderDetail(idea) {
               <div class="pipeline-complete-badge">★ Fully Implemented</div>`;
             return '';
           })()}
+          ${idea.status !== 'Rejected' && idea.status !== 'Implemented' && idea.status !== 'Awaiting Digi Approval' && idea.status !== 'Awaiting Funnel Response' && idea.status !== 'Funnel Submitted' ? `
           ${idea.status !== 'Rejected' && idea.status !== 'Implemented' && idea.status !== 'Awaiting Digi Approval' && idea.status !== 'Driver Review' ? `
             <button class="btn-reject-stage" onclick="changeStatus('${idea.id}', 'Rejected')">✗ Reject</button>
           ` : ''}
@@ -890,6 +921,56 @@ window.digiReject = async function(ideaId) {
   }
 };
 
+window.digiSendToFunnel = async function(ideaId) {
+  const note = document.getElementById('digi-note-input')?.value.trim() || null;
+  const btn = document.querySelector('.digi-approval-actions .btn-funnel');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Sending…'; }
+
+  try {
+    // 1. Look up the idea
+    const idea = allIdeas.find(i => i.id === ideaId) || currentDetailIdea;
+    if (!idea) throw new Error('Idea not found');
+
+    // 2. Call the Edge Function via Supabase client (handles CORS + auth automatically)
+    const { data: fnData, error: fnError } = await supabaseClient.functions.invoke('smart-action', {
+      body: {
+        idea_id:    ideaId,
+        digi_note:  note,
+        digi_email: currentUser.email
+      }
+    });
+
+    if (fnError) throw new Error(fnError.message || 'Edge Function error');
+
+    // 3. Update status to "Awaiting Funnel Response"
+    const updates = {
+      status: 'Awaiting Funnel Response',
+      digi_approved_by: currentUser.email,
+      ...(note ? { digi_note: note } : {})
+    };
+    const { error } = await supabaseClient.from('automation_ideas').update(updates).eq('id', ideaId);
+    if (error) throw error;
+
+    if (currentDetailIdea && currentDetailIdea.id === ideaId) {
+      currentDetailIdea = { ...currentDetailIdea, ...updates };
+    }
+
+    await fetchAndRenderIdeas();
+    renderDetail(currentDetailIdea);
+
+    // Show a brief confirmation
+    const box = document.querySelector('.digi-approval-box');
+    if (box) {
+      box.innerHTML = `
+        <div class="digi-funnel-sent">
+          <span class="digi-funnel-sent-icon">✉</span>
+          <span>Funnel request sent! The creator has been emailed a link to fill out the Sales Funnel form.</span>
+        </div>`;
+    }
+  } catch(err) {
+    console.error('Send to funnel error', err);
+    alert('Failed to send funnel request: ' + (err.message || 'unknown'));
+    if (btn) { btn.disabled = false; btn.textContent = '↗ Send to Sales Funnel'; }
 // ===================== DRIVER ACTIONS =====================
 window.driverApprove = async function(ideaId) {
   const { data: idea, error: fetchError } = await supabaseClient
@@ -1084,3 +1165,4 @@ window.reRateIdea     = reRateIdea;
 window.switchTab      = switchTab;
 window.digiApprove    = digiApprove;
 window.digiReject     = digiReject;
+window.digiSendToFunnel = digiSendToFunnel;

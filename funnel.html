@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IdeaFlow | Sales Funnel Request</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0c0c0f;
+      --surface: #141418;
+      --surface2: #1c1c22;
+      --border: #2a2a35;
+      --accent: #c8f74a;
+      --accent2: #7b61ff;
+      --text: #e8e8f0;
+      --muted: #6b6b80;
+      --approved: #4af78e;
+      --rejected: #f7614a;
+    }
+
+    body {
+      font-family: 'DM Mono', monospace;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 40px 20px 80px;
+    }
+
+    /* ── AMBIENT GLOWS ── */
+    .page-glow {
+      position: fixed;
+      border-radius: 50%;
+      pointer-events: none;
+      filter: blur(90px);
+      z-index: 0;
+    }
+    .page-glow--purple {
+      width: 600px; height: 600px;
+      background: radial-gradient(circle, rgba(123,97,255,.10) 0%, transparent 70%);
+      top: -200px; right: -200px;
+      animation: drift-b 18s ease-in-out infinite alternate;
+    }
+    .page-glow--green {
+      width: 400px; height: 400px;
+      background: radial-gradient(circle, rgba(200,247,74,.07) 0%, transparent 70%);
+      bottom: -100px; left: -100px;
+      animation: drift-a 14s ease-in-out infinite alternate;
+    }
+    @keyframes drift-a { from { transform: translate(0,0); } to { transform: translate(40px,30px); } }
+    @keyframes drift-b { from { transform: translate(0,0); } to { transform: translate(-30px,-20px); } }
+
+    /* ── LAYOUT ── */
+    .page-wrap {
+      position: relative;
+      z-index: 1;
+      max-width: 680px;
+      margin: 0 auto;
+    }
+
+    .page-logo {
+      font-family: 'Syne', sans-serif;
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -1px;
+      margin-bottom: 32px;
+    }
+    .page-logo span { color: var(--accent); }
+
+    /* ── STATUS STATES ── */
+    #state-loading, #state-error, #state-success, #state-form {
+      display: none;
+    }
+    #state-loading.visible,
+    #state-error.visible,
+    #state-success.visible,
+    #state-form.visible {
+      display: block;
+    }
+
+    .loading-text {
+      color: var(--muted);
+      font-size: 13px;
+      letter-spacing: .06em;
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:.5} 50%{opacity:1} }
+
+    .error-box, .success-box {
+      border-radius: 14px;
+      padding: 40px 36px;
+      text-align: center;
+    }
+    .error-box {
+      background: rgba(247,97,74,.06);
+      border: 1px solid rgba(247,97,74,.25);
+    }
+    .error-box .icon { font-size: 32px; margin-bottom: 12px; }
+    .error-box h2 {
+      font-family: 'Syne', sans-serif;
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--rejected);
+      margin-bottom: 8px;
+    }
+    .error-box p { font-size: 13px; color: var(--muted); line-height: 1.6; }
+
+    .success-box {
+      background: rgba(74,247,142,.06);
+      border: 1px solid rgba(74,247,142,.25);
+    }
+    .success-box .icon { font-size: 36px; margin-bottom: 12px; }
+    .success-box h2 {
+      font-family: 'Syne', sans-serif;
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--approved);
+      margin-bottom: 10px;
+    }
+    .success-box p { font-size: 13px; color: var(--muted); line-height: 1.7; }
+
+    /* ── FORM CARD ── */
+    .funnel-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 40px 40px;
+      animation: box-in .35s cubic-bezier(.22,1,.36,1) both;
+    }
+    @keyframes box-in { from{opacity:0;transform:translateY(16px);} to{opacity:1;transform:translateY(0);} }
+
+    .funnel-header {
+      margin-bottom: 32px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+    }
+    .funnel-tag {
+      font-family: 'Syne', sans-serif;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--accent2);
+      margin-bottom: 10px;
+    }
+    .funnel-title {
+      font-family: 'Syne', sans-serif;
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -.5px;
+      margin-bottom: 6px;
+    }
+    .funnel-subtitle {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.6;
+      letter-spacing: .03em;
+    }
+
+    /* ── SECTION LABELS ── */
+    .section-label {
+      font-family: 'Syne', sans-serif;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 18px;
+      margin-top: 32px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(200,247,74,.12);
+    }
+    .section-label:first-of-type { margin-top: 0; }
+
+    /* ── PRE-FILL GRID ── */
+    .prefill-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 4px;
+    }
+    @media (max-width: 520px) { .prefill-grid { grid-template-columns: 1fr; } }
+
+    .prefill-box {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+    }
+    .prefill-label {
+      font-size: 9px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .prefill-value {
+      font-size: 13px;
+      color: var(--text);
+      line-height: 1.5;
+    }
+
+    .prefill-desc {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+      font-size: 13px;
+      color: var(--text);
+      line-height: 1.7;
+      margin-bottom: 4px;
+    }
+    .prefill-desc-label {
+      font-size: 9px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    /* ── FORM FIELDS ── */
+    .field-group { margin-bottom: 22px; }
+
+    label {
+      display: block;
+      font-size: 11px;
+      letter-spacing: .10em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+    label .required { color: var(--rejected); margin-left: 2px; }
+
+    textarea, input[type="text"] {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      padding: 12px 14px;
+      outline: none;
+      transition: border-color .2s, box-shadow .2s;
+      resize: vertical;
+    }
+    textarea { min-height: 100px; }
+    textarea:focus, input:focus {
+      border-color: var(--accent2);
+      box-shadow: 0 0 0 3px rgba(123,97,255,.10);
+    }
+
+    .field-hint {
+      font-size: 10px;
+      color: var(--muted);
+      margin-top: 6px;
+      letter-spacing: .04em;
+      line-height: 1.5;
+    }
+
+    /* ── SUBMIT AREA ── */
+    .submit-area {
+      margin-top: 36px;
+      padding-top: 28px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .btn-submit-funnel {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 14px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      background: var(--accent2);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 16px 28px;
+      cursor: pointer;
+      transition: opacity .2s, transform .15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+    .btn-submit-funnel:hover:not(:disabled) { opacity: .88; }
+    .btn-submit-funnel:active { transform: scale(.98); }
+    .btn-submit-funnel:disabled { opacity: .4; cursor: not-allowed; }
+
+    .submit-note {
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: .04em;
+      text-align: center;
+      line-height: 1.6;
+    }
+
+    .form-status {
+      font-size: 12px;
+      letter-spacing: .04em;
+      padding: 10px 14px;
+      border-radius: 8px;
+      display: none;
+    }
+    .form-status.error   { display:block; background: rgba(247,97,74,.08); color: var(--rejected); border: 1px solid rgba(247,97,74,.2); }
+    .form-status.success { display:block; background: rgba(74,247,142,.08); color: var(--approved); border: 1px solid rgba(74,247,142,.2); }
+  </style>
+</head>
+<body>
+  <div class="page-glow page-glow--purple"></div>
+  <div class="page-glow page-glow--green"></div>
+
+  <div class="page-wrap">
+    <div class="page-logo">idea<span>flow</span></div>
+
+    <!-- Loading -->
+    <div id="state-loading" class="visible">
+      <div class="loading-text">⏳ Loading your request…</div>
+    </div>
+
+    <!-- Error -->
+    <div id="state-error">
+      <div class="error-box">
+        <div class="icon">✗</div>
+        <h2>Invalid or Expired Link</h2>
+        <p id="error-msg">This Sales Funnel link is not valid or has already been used.<br>Please contact your Digi Community Driver for assistance.</p>
+      </div>
+    </div>
+
+    <!-- Success -->
+    <div id="state-success">
+      <div class="success-box">
+        <div class="icon">✓</div>
+        <h2>Form Submitted!</h2>
+        <p>Thank you — your Sales Funnel request has been received.<br>The Digi Community Driver will review your responses and be in touch soon.</p>
+      </div>
+    </div>
+
+    <!-- Form -->
+    <div id="state-form">
+      <div class="funnel-card">
+        <div class="funnel-header">
+          <div class="funnel-tag">↗ Sales Funnel Request</div>
+          <div class="funnel-title" id="f-idea-name">—</div>
+          <div class="funnel-subtitle">
+            The Digi Community Driver has reviewed your automation idea and would like more information before proceeding.<br>
+            Please fill out the form below — this link is unique to your request.
+          </div>
+        </div>
+
+        <!-- Pre-filled idea details -->
+        <div class="section-label">§1 — Your Idea (pre-filled)</div>
+
+        <div class="prefill-desc-label">Description</div>
+        <div class="prefill-desc" id="f-idea-desc">—</div>
+
+        <div class="prefill-grid" style="margin-top:12px">
+          <div class="prefill-box">
+            <div class="prefill-label">Submitted by</div>
+            <div class="prefill-value" id="f-idea-author">—</div>
+          </div>
+          <div class="prefill-box">
+            <div class="prefill-label">Weekly hours saved</div>
+            <div class="prefill-value" id="f-idea-hours">—</div>
+          </div>
+          <div class="prefill-box">
+            <div class="prefill-label">Process score</div>
+            <div class="prefill-value" id="f-idea-std">—</div>
+          </div>
+          <div class="prefill-box">
+            <div class="prefill-label">Rule-based?</div>
+            <div class="prefill-value" id="f-idea-rule">—</div>
+          </div>
+          <div class="prefill-box">
+            <div class="prefill-label">Digital input?</div>
+            <div class="prefill-value" id="f-idea-digital">—</div>
+          </div>
+          <div class="prefill-box">
+            <div class="prefill-label">Systems involved</div>
+            <div class="prefill-value" id="f-idea-systems">—</div>
+          </div>
+        </div>
+
+        <!-- Digi note if present -->
+        <div id="digi-note-block" style="display:none; margin-top:14px;">
+          <div class="prefill-box" style="border-color: rgba(247,201,72,.3); background: rgba(247,201,72,.05);">
+            <div class="prefill-label" style="color:#f7c948;">⚑ Note from Digi Driver</div>
+            <div class="prefill-value" id="f-digi-note" style="color:#f7c948;"></div>
+          </div>
+        </div>
+
+        <!-- Questionnaire -->
+        <div class="section-label">§2 — Funnel Questionnaire</div>
+
+        <div class="field-group">
+          <label>What is the core business problem this automation solves? <span class="required">*</span></label>
+          <textarea id="q-problem" placeholder="Describe the pain point, inefficiency, or manual effort you're trying to eliminate…"></textarea>
+          <div class="field-hint">Be specific — include the team affected, how often the problem occurs, and its impact.</div>
+        </div>
+
+        <div class="field-group">
+          <label>What is the expected outcome if this automation is implemented? <span class="required">*</span></label>
+          <textarea id="q-outcome" placeholder="e.g. Reduce processing time from 3 hours to 10 minutes, eliminate manual errors in monthly reports…"></textarea>
+          <div class="field-hint">Include measurable goals where possible (time saved, error rate, cost reduction).</div>
+        </div>
+
+        <div class="field-group">
+          <label>What is the priority / urgency of this request? <span class="required">*</span></label>
+          <textarea id="q-priority" placeholder="e.g. High — this process runs daily and affects 4 teams. Needs to be solved before end of Q3…" style="min-height:80px;"></textarea>
+          <div class="field-hint">Mention any deadlines, dependencies, or business events that make timing important.</div>
+        </div>
+
+        <div id="form-status" class="form-status"></div>
+
+        <div class="submit-area">
+          <button class="btn-submit-funnel" id="submit-btn" onclick="submitFunnel()">
+            ↗ Submit Sales Funnel Request
+          </button>
+          <div class="submit-note">
+            Your response will be sent to the Digi Community Driver for final review.<br>
+            This link can only be used once.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const SUPABASE_URL      = "https://qgtwismenwfiipmvkjcm.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFndHdpc21lbndmaWlwbXZramNtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5NzYxMDQsImV4cCI6MjA5NTU1MjEwNH0.iqrPgymdol7Z8gzPQF3H84nWRM79Nm8vzo9RMo4GpAI";
+
+  const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  let funnelRecord = null;
+
+  function showState(id) {
+    ['state-loading','state-error','state-success','state-form'].forEach(s => {
+      document.getElementById(s).classList.remove('visible');
+    });
+    document.getElementById(id).classList.add('visible');
+  }
+
+  function esc(str) {
+    if (!str) return '—';
+    return String(str).replace(/[&<>]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]||m));
+  }
+
+  async function init() {
+    // Extract token from URL  ?token=xxx
+    const params = new URLSearchParams(window.location.search);
+    const token  = params.get('token');
+
+    if (!token) {
+      document.getElementById('error-msg').textContent = 'No access token found in this URL. Please use the link from your email.';
+      showState('state-error');
+      return;
+    }
+
+    try {
+      // Look up the funnel_request by token
+      const { data, error } = await db
+        .from('funnel_requests')
+        .select('*, automation_ideas(*)')
+        .eq('token', token)
+        .single();
+
+      if (error || !data) {
+        showState('state-error');
+        return;
+      }
+
+      // Already used?
+      if (data.status === 'completed') {
+        document.getElementById('error-msg').textContent =
+          'This link has already been used to submit a response. Each link can only be used once.';
+        showState('state-error');
+        return;
+      }
+
+      // Expired? (48 hours)
+      const created = new Date(data.created_at);
+      const now     = new Date();
+      const hours   = (now - created) / (1000 * 60 * 60);
+      if (hours > 48) {
+        document.getElementById('error-msg').textContent =
+          'This link has expired (links are valid for 48 hours). Please ask your Digi Driver to resend.';
+        showState('state-error');
+        return;
+      }
+
+      funnelRecord = data;
+      const idea   = data.automation_ideas;
+
+      // Populate pre-filled fields
+      document.getElementById('f-idea-name').textContent    = idea.automation_name || '—';
+      document.getElementById('f-idea-desc').textContent    = idea.description     || 'No description provided.';
+      document.getElementById('f-idea-author').textContent  = idea.idea_author     || '—';
+      document.getElementById('f-idea-hours').textContent   = idea.weekly_hours != null ? idea.weekly_hours + 'h / week' : '—';
+      document.getElementById('f-idea-std').textContent     = idea.standardized_process_score != null ? idea.standardized_process_score + ' / 10' : '—';
+      document.getElementById('f-idea-rule').textContent    = idea.rule_based      || '—';
+      document.getElementById('f-idea-digital').textContent = idea.digital_input   || '—';
+      document.getElementById('f-idea-systems').textContent = idea.software_systems || '—';
+
+      // Digi note
+      if (data.digi_note) {
+        document.getElementById('f-digi-note').textContent = data.digi_note;
+        document.getElementById('digi-note-block').style.display = '';
+      }
+
+      // Update page title
+      document.title = `IdeaFlow | Sales Funnel — ${idea.automation_name || 'Request'}`;
+
+      showState('state-form');
+    } catch(err) {
+      console.error('Init error:', err);
+      showState('state-error');
+    }
+  }
+
+  async function submitFunnel() {
+    const problem  = document.getElementById('q-problem').value.trim();
+    const outcome  = document.getElementById('q-outcome').value.trim();
+    const priority = document.getElementById('q-priority').value.trim();
+
+    const statusEl = document.getElementById('form-status');
+    statusEl.className = 'form-status';
+    statusEl.textContent = '';
+
+    if (!problem)  { showFormError('Please answer the first question (core business problem).'); return; }
+    if (!outcome)  { showFormError('Please answer the second question (expected outcome).'); return; }
+    if (!priority) { showFormError('Please answer the third question (priority / urgency).'); return; }
+
+    const btn = document.getElementById('submit-btn');
+    btn.disabled = true;
+    btn.textContent = '⏳ Submitting…';
+
+    try {
+      // 1. Insert funnel response
+      const { error: respErr } = await db.from('funnel_responses').insert([{
+        funnel_request_id: funnelRecord.id,
+        idea_id:           funnelRecord.idea_id,
+        answer_problem:    problem,
+        answer_outcome:    outcome,
+        answer_priority:   priority
+      }]);
+      if (respErr) throw respErr;
+
+      // 2. Mark token as used
+      const { error: tokenErr } = await db
+        .from('funnel_requests')
+        .update({ status: 'completed', completed_at: new Date().toISOString() })
+        .eq('id', funnelRecord.id);
+      if (tokenErr) throw tokenErr;
+
+      // 3. Update idea status to "Funnel Submitted"
+      const { error: ideaErr } = await db
+        .from('automation_ideas')
+        .update({ status: 'Funnel Submitted' })
+        .eq('id', funnelRecord.idea_id);
+      if (ideaErr) throw ideaErr;
+
+      showState('state-success');
+    } catch(err) {
+      console.error('Submit error:', err);
+      showFormError('Submission failed: ' + (err.message || 'unknown error. Please try again.'));
+      btn.disabled = false;
+      btn.textContent = '↗ Submit Sales Funnel Request';
+    }
+  }
+
+  function showFormError(msg) {
+    const el = document.getElementById('form-status');
+    el.textContent = msg;
+    el.className = 'form-status error';
+  }
+
+  window.submitFunnel = submitFunnel;
+
+  document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
