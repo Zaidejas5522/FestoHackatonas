@@ -198,6 +198,10 @@ function showDashboard() {
   const digiTab = document.getElementById('digi-tab');
   if (digiTab) digiTab.style.display = isDigiDriver() ? '' : 'none';
 
+  // Show/hide  Driver tab based on role
+  const driverTab = document.getElementById('driver-tab');
+  if (driverTab) driverTab.style.display = isDriver() ? '' : 'none';
+
   // Reset to all-ideas tab
   activeTab = 'all';
   document.querySelectorAll('.nav-tab').forEach(el => {
@@ -445,7 +449,13 @@ function renderIdeas() {
     filtered = filtered.filter(i => i.status === 'In Development' || i.status === 'Testing' || i.status === 'Implemented');
   } else if (activeTab === 'digi') {
     filtered = filtered.filter(i => i.status === 'Awaiting Digi Approval');
-  }
+  } else if (activeTab === 'driver') {
+    filtered = filtered.filter(i => 
+    i.ai_score != null && 
+    i.ai_score >= 50 && 
+    i.ai_score <= 65
+  );
+} 
 
   if (statusFilter !== 'All') filtered = filtered.filter(i => i.status === statusFilter);
   if (searchTerm.trim()) {
