@@ -77,7 +77,7 @@ let allIdeas          = [];
 let currentDetailIdea = null;
 let ideasChannel      = null;
 let activeTab         = 'all'; // 'all' | 'approved'
-
+let currentUserDepartmentId = null; // For departments
 // ===================== THEME =====================
 function applyTheme(theme) {
   document.body.classList.toggle('theme-light', theme === 'light');
@@ -192,16 +192,30 @@ window.switchTab = function(tab) {
   renderIdeas();
 };
 
-function showDashboard() {
+async function showDashboard() {
   showView('dashboard-view');
   const email = currentUser?.email || currentUser?.user_metadata?.full_name || '';
   document.getElementById('user-display').textContent = email;
+
+  // Fetch current user's department ID from profiles table
+  if (currentUser) {
+    const { data: profile, error } = await supabaseClient
+      .from('profiles')
+      .select('department_id')
+      .eq('id', currentUser.id)
+      .single();
+    if (!error && profile) {
+      currentUserDepartmentId = profile.department_id;
+    } else {
+      currentUserDepartmentId = null;
+    }
+  }
 
   // Show/hide Digi Driver tab based on role
   const digiTab = document.getElementById('digi-tab');
   if (digiTab) digiTab.style.display = isDigiDriver() ? '' : 'none';
 
-  // Show/hide  Driver tab based on role
+  // Show/hide Driver tab based on role
   const driverTab = document.getElementById('driver-tab');
   if (driverTab) driverTab.style.display = isDriver() ? '' : 'none';
 
@@ -232,6 +246,33 @@ async function fetchAndRenderIdeas() {
   if (!currentUser) return;
   allIdeas = await fetchIdeasFromDB();
   renderIdeas();
+}
+
+//HELPER METHOD FOR DEPARTMENT
+async function insertIdea(d) {
+  if (!supabaseClient || !currentUser) throw new Error("Not authenticated");
+  
+  // Get the user's department
+  const deptId = await getCurrentUserDepartment();
+  
+  const row = {
+    idea_author: d.idea_author,
+    automation_name: d.automation_name,
+    description: d.description,
+    standardized_process_score: d.standardized_process_score,
+    digital_input: d.digital_input,
+    rule_based: d.rule_based,
+    software_systems: d.software_systems,
+    weekly_hours: d.weekly_hours,
+    speed_criticality: d.speed_criticality,
+    test_data_available: d.test_data_available,
+    process_documented: d.process_documented,
+    status: 'Submitted',
+    department_id: deptId          // store the department
+  };
+  const { data, error } = await supabaseClient.from('automation_ideas').insert([row]).select();
+  if (error) throw error;
+  return data[0];
 }
 
 async function insertIdea(d) {
@@ -450,11 +491,18 @@ function renderIdeas() {
       i.status === 'Funnel Submitted'
     );
   } else if (activeTab === 'driver') {
-    filtered = filtered.filter(i => i.status === 'Driver Review');
+    // Show only Driver Review ideas from the user's own department
+    filtered = filtered.filter(i =>
+      i.status === 'Driver Review' && i.department_id === currentUserDepartmentId
+    );
+  } else if (activeTab === 'driver-important') {
+    // Show only important (AI score >= 70) Driver Review ideas from own department
+    filtered = filtered.filter(i =>
+      i.status === 'Driver Review' &&
+      (i.ai_score || 0) >= 70 &&
+      i.department_id === currentUserDepartmentId
+    );
   }
-   else if (activeTab === 'driver-important') {
-  filtered = filtered.filter(i => i.status === 'Driver Review' && (i.ai_score || 0) >= 70);
-}
 
   if (statusFilter !== 'All') filtered = filtered.filter(i => i.status === statusFilter);
   if (searchTerm.trim()) {
@@ -472,10 +520,9 @@ function renderIdeas() {
     } else if (activeTab === 'digi') {
       msg = '⚑ No ideas awaiting your approval right now.';
     } else if (activeTab === 'driver') {
-      msg = '🎯 No ideas awaiting driver review.';
-    }
-    else if( activeTab === 'driver-important') {
-      msg = '❗ No important ideas awaiting driver review.';
+      msg = '🎯 No ideas awaiting driver review in your department.';
+    } else if (activeTab === 'driver-important') {
+      msg = '❗ No important ideas awaiting driver review in your department.';
     }
     grid.innerHTML = `<div class="empty-state">${msg}</div>`;
     return;
