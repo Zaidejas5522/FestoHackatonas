@@ -24,6 +24,7 @@ const PIPELINE_STAGES = [
   { key: 'Submitted',              label: 'Submitted',          icon: '✦', color: 'stage-submitted'   },
   { key: 'AI Review',              label: 'AI Review',          icon: '⟳', color: 'stage-review'      },
   { key: 'Driver Review',          label: 'Driver Review',      icon: '🎯', color: 'stage-driver'     }, 
+  { key: 'Consulting with Driver', label: 'Consulting',         icon: '✉', color: 'stage-consult'     }, // NEW
   { key: 'Awaiting Digi Approval', label: 'Digi Approval',      icon: '⚑', color: 'stage-digi'        },
   { key: 'Awaiting Funnel Response',label: 'Funnel Response',    icon: '✉', color: 'stage-funnel'      },
   { key: 'Funnel Submitted',        label: 'Funnel Submitted',   icon: '↗', color: 'stage-funnel-done' },
@@ -511,6 +512,10 @@ async function showDashboard() {
   const driverImportantTab = document.getElementById('driver-important-tab');
   if (driverImportantTab) driverImportantTab.style.display = isDriver() ? '' : 'none';
 
+  // Show/hide On Hold tab only for drivers
+  const holdTab = document.getElementById('hold-tab');
+  if (holdTab) holdTab.style.display = isDriver() ? '' : 'none';
+
   // Reset to all-ideas tab
   activeTab = 'all';
   document.querySelectorAll('.nav-tab').forEach(el => {
@@ -521,7 +526,6 @@ async function showDashboard() {
   fetchAndRenderIdeas();
   subscribeToRealtime();
 }
-
 // ===================== SUPABASE CRUD =====================
 async function fetchIdeasFromDB() {
   if (!supabaseClient || !currentUser) return [];
@@ -839,9 +843,10 @@ function renderIdeas() {
       i.department_id === currentUserDepartmentId
     );
   }
-   else if (activeTab === 'driver-important') {
-  filtered = filtered.filter(i => i.status === 'Driver Review' && (i.ai_score || 0) >= 70);
- }
+ else if (activeTab === 'hold') {
+  filtered = filtered.filter(i => i.status === 'Consulting with Driver');
+}
+
 
   if (statusFilter !== 'All') filtered = filtered.filter(i => i.status === statusFilter);
   if (searchTerm.trim()) {
@@ -863,6 +868,9 @@ function renderIdeas() {
     } else if (activeTab === 'driver-important') {
       msg = '❗ No important ideas awaiting driver review in your department.';
     }
+    else if (activeTab === 'hold') {
+  msg = '⏸ No ideas are currently on hold.';
+}
     grid.innerHTML = `<div class="empty-state">${msg}</div>`;
     return;
   }
@@ -1086,14 +1094,15 @@ function renderDetail(idea) {
         </div>
       ` : ''}
 
-      <!-- DRIVER REVIEW BOX (separate condition) -->
-      ${idea.status === 'Driver Review' ? `
+      <!-- DRIVER REVIEW BOX (shown for both Driver Review and Consulting with Driver) -->
+      ${(idea.status === 'Driver Review' || idea.status === 'Consulting with Driver') ? `
         ${isDriver() ? `
           <div class="driver-review-box">
             <div class="driver-review-label">🎯 Driver Review</div>
             <textarea id="driver-note-input" placeholder="Optional note for the submitter…" rows="2"></textarea>
             <div class="driver-review-actions">
               <button class="btn-advance" onclick="driverApprove('${idea.id}')">✓ Approve (send to Digi Queue)</button>
+              ${idea.status !== 'Consulting with Driver' ? `<button class="btn-consult" onclick="consultWithDriver('${idea.id}')">✉ Consultation</button>` : ''}
               <button class="btn-reject-stage" onclick="driverReject('${idea.id}')">✗ Reject</button>
             </div>
           </div>
@@ -1150,7 +1159,7 @@ function renderDetail(idea) {
       ` : ''}
 
       <!-- PIPELINE ACTION BUTTONS (hide for statuses that have their own action boxes) -->
-      ${idea.status !== 'Driver Review' && idea.status !== 'Awaiting Digi Approval' && idea.status !== 'Awaiting Funnel Response' && idea.status !== 'Funnel Submitted' ? `
+      ${idea.status !== 'Driver Review' && idea.status !== 'Consulting with Driver' && idea.status !== 'Awaiting Digi Approval' && idea.status !== 'Awaiting Funnel Response' && idea.status !== 'Funnel Submitted' ? `
         <div class="pipeline-actions">
           ${(() => {
             const next = getNextStage(idea.status);
@@ -1240,6 +1249,47 @@ window.changeStatus = async function(ideaId, newStatus) {
   try { await updateIdeaStatus(ideaId, newStatus); }
   catch(err) { console.error("Status update error", err); alert("Failed to update status. Check console."); }
 };
+
+//DRIVER
+window.consultWithDriver = async function(ideaId) {
+  const { data: idea, error: fetchError } = await supabaseClient
+    .from('automation_ideas')
+    .select('status')
+    .eq('id', ideaId)
+    .single();
+  
+  if (fetchError || !idea) {
+    alert('Could not verify idea status.');
+    return;
+  }
+  
+  if (idea.status !== 'Driver Review') {
+    alert(`Cannot consult: idea is in "${idea.status}" stage, not "Driver Review".`);
+    return;
+  }
+  
+  const note = document.getElementById('driver-note-input')?.value.trim() || null;
+  const btn = document.querySelector('.driver-review-actions .btn-consult');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Sending…'; }
+  
+  try {
+    const updates = { status: 'Consulting with Driver', driver_note: note, stage_updated_at: new Date().toISOString() };
+    const { error } = await supabaseClient.from('automation_ideas').update(updates).eq('id', ideaId);
+    if (error) throw error;
+    
+    if (currentDetailIdea && currentDetailIdea.id === ideaId) {
+      currentDetailIdea = { ...currentDetailIdea, ...updates };
+    }
+    
+    await fetchAndRenderIdeas();
+    if (currentDetailIdea && currentDetailIdea.id === ideaId) renderDetail(currentDetailIdea);
+  } catch(err) {
+    console.error('Consult error', err);
+    alert('Failed to move idea to consultation: ' + (err.message || 'unknown'));
+    if (btn) btn.disabled = false;
+  }
+};
+
 
 // ===================== DIGI DRIVER ACTIONS =====================
 window.digiApprove = async function(ideaId) {
@@ -1387,8 +1437,9 @@ window.driverApprove = async function(ideaId) {
     return;
   }
   
-  if (idea.status !== 'Driver Review') {
-    alert(`Cannot approve: idea is in "${idea.status}" stage, not "Driver Review".`);
+  // Allow approve from Driver Review OR Consulting with Driver (On Hold)
+  if (idea.status !== 'Driver Review' && idea.status !== 'Consulting with Driver') {
+    alert(`Cannot approve: idea is in "${idea.status}" stage.`);
     return;
   }
   
@@ -1411,9 +1462,6 @@ window.driverApprove = async function(ideaId) {
   }
 };
 
-
-
-
 window.driverReject = async function(ideaId) {
   const { data: idea, error: fetchError } = await supabaseClient
     .from('automation_ideas')
@@ -1426,8 +1474,9 @@ window.driverReject = async function(ideaId) {
     return;
   }
   
-  if (idea.status !== 'Driver Review') {
-    alert(`Cannot reject: idea is in "${idea.status}" stage, not "Driver Review".`);
+  // Allow reject from Driver Review OR Consulting with Driver (On Hold)
+  if (idea.status !== 'Driver Review' && idea.status !== 'Consulting with Driver') {
+    alert(`Cannot reject: idea is in "${idea.status}" stage.`);
     return;
   }
   
