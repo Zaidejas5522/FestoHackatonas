@@ -1272,7 +1272,7 @@ function renderIdeas() {
     }
 
     return `
-      <div class="idea-card" data-id="${idea.id}" onclick="showDetailById('${idea.id}')">
+      <div class="idea-card" data-id="${idea.id}" data-status="${idea.status}" onclick="showDetailById('${idea.id}')">
         <div class="card-header-row">
           <div class="card-title">${escapeHtml(idea.automation_name || '—')}</div>
           ${scoreBadge}
