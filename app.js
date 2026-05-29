@@ -95,6 +95,7 @@ try {
 let currentUser       = null;
 let allIdeas          = [];
 let currentDetailIdea = null;
+let detailReturnTab    = null; // tab active when a card was opened
 let ideasChannel      = null;
 let activeTab         = 'all';
 let currentUserDepartmentId = null;
@@ -514,7 +515,7 @@ window.toggleTheme = function() {
 
 // ===================== UTILITY: SHOW/HIDE VIEWS =====================
 function showView(id) {
-  ['login-view','register-view','dashboard-view','completed-view','detail-view','stats-view','funnel-view','funnel-detail-view'].forEach(v => {
+  ['login-view','register-view','dashboard-view','completed-view','rejected-view','detail-view','stats-view','funnel-view','funnel-detail-view'].forEach(v => {
     const el = document.getElementById(v);
     if (el) el.style.display = 'none';
   });
@@ -603,8 +604,14 @@ window.togglePassword = function(inputId, btn) {
 
 // ===================== TAB SWITCHING =====================
 function syncNavTabActive(tab) {
-  document.querySelectorAll('.nav-tab').forEach(el => {
+  document.querySelectorAll('.nav-tab, .nav-dropdown-item').forEach(el => {
     el.classList.toggle('active', el.dataset.tab === tab);
+  });
+  // Highlight parent group trigger when a child is active
+  document.querySelectorAll('.nav-group').forEach(group => {
+    const trigger = group.querySelector('.nav-group-trigger');
+    const hasActive = group.querySelector('.nav-dropdown-item.active');
+    if (trigger) trigger.classList.toggle('group-active', !!hasActive);
   });
 }
 
@@ -623,6 +630,21 @@ function syncRoleNavTabs() {
     const el = document.getElementById(id);
     if (el) el.style.display = showDriver;
   });
+  // Show/hide the Review group wrapper based on role
+  const hasReview = isDigiDriver() || isDriver();
+  ['nav-group-review', 'completed-nav-group-review', 'rejected-nav-group-review'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = hasReview ? '' : 'none';
+  });
+  // Also sync role tabs in rejected view
+  ['rejected-digi-tab'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = isDigiDriver() ? '' : 'none';
+  });
+  ['rejected-driver-tab', 'rejected-hold-tab'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = isDriver() ? '' : 'none';
+  });
 }
 
 function syncUserDisplays(email) {
@@ -635,10 +657,14 @@ function syncUserDisplays(email) {
 
 window.switchTab = function(tab) {
   activeTab = tab;
+  const email = currentUser?.email || currentUser?.user_metadata?.full_name || '';
   if (tab === 'completed') {
     showView('completed-view');
-    const email = currentUser?.email || currentUser?.user_metadata?.full_name || '';
     syncUserDisplays(email);
+  } else if (tab === 'rejected') {
+    showView('rejected-view');
+    const el = document.getElementById('rejected-user-display');
+    if (el) el.textContent = email;
   } else {
     showView('dashboard-view');
   }
@@ -1247,17 +1273,28 @@ function sortIdeasList(list, mode) {
 
 function getIdeasListElements() {
   const onCompleted = activeTab === 'completed';
+  const onRejected  = activeTab === 'rejected';
   return {
-    grid: document.getElementById(onCompleted ? 'completed-ideas-grid' : 'ideas-grid'),
-    search: document.getElementById(onCompleted ? 'completed-search' : 'search'),
-    sort: document.getElementById(onCompleted ? 'completed-sort' : 'ideas-sort'),
+    grid: document.getElementById(
+      onCompleted ? 'completed-ideas-grid' :
+      onRejected  ? 'rejected-ideas-grid'  : 'ideas-grid'
+    ),
+    search: document.getElementById(
+      onCompleted ? 'completed-search' :
+      onRejected  ? 'rejected-search'  : 'search'
+    ),
+    sort: document.getElementById(
+      onCompleted ? 'completed-sort' :
+      onRejected  ? 'rejected-sort'  : 'ideas-sort'
+    ),
     statusFilter: document.getElementById('status-filter'),
     onCompleted,
+    onRejected,
   };
 }
 
 function renderIdeas() {
-  const { grid, search, sort, statusFilter, onCompleted } = getIdeasListElements();
+  const { grid, search, sort, statusFilter, onCompleted, onRejected } = getIdeasListElements();
   if (!grid) return;
 
   const searchTerm   = (search?.value || '').toLowerCase();
@@ -1295,10 +1332,12 @@ function renderIdeas() {
     );
   } else if (activeTab === 'hold') {
     filtered = filtered.filter(i => i.status === 'Consulting with Driver');
+  } else if (activeTab === 'rejected') {
+    filtered = filtered.filter(i => i.status === 'Rejected');
   }
 
-  // Apply status filter on dashboard tabs (not on Completed page)
-  if (!onCompleted && statusFilterVal !== 'All') {
+  // Apply status filter on dashboard tabs (not on Completed or Rejected page)
+  if (!onCompleted && !onRejected && statusFilterVal !== 'All') {
     filtered = filtered.filter(i => i.status === statusFilterVal);
   }
 
@@ -1328,6 +1367,8 @@ function renderIdeas() {
       msg = '❗ No important ideas awaiting driver review in your department.';
     } else if (activeTab === 'hold') {
       msg = '⏸ No ideas are currently on hold.';
+    } else if (activeTab === 'rejected') {
+      msg = '✗ No rejected ideas in the archive.';
     }
     grid.innerHTML = `<div class="empty-state">${msg}</div>`;
     return;
@@ -1350,11 +1391,18 @@ function renderIdeas() {
       ? `<span class="card-ai-verdict ai-decision--${idea.ai_status.toLowerCase()}">${escapeHtml(idea.ai_status)}</span>`
       : '';
 
+    const deleteBtn = activeTab === 'all'
+      ? `<button class="card-delete-btn" onclick="event.stopPropagation(); deleteIdea('${idea.id}')" title="Delete idea" aria-label="Delete idea">✕</button>`
+      : '';
+
     return `
       <div class="idea-card" data-id="${idea.id}" data-status="${idea.status}" onclick="showDetailById('${idea.id}')">
         <div class="card-header-row">
           <div class="card-title">${escapeHtml(idea.automation_name || '—')}</div>
-          ${scoreBadge}
+          <div class="card-header-actions">
+            ${scoreBadge}
+            ${deleteBtn}
+          </div>
         </div>
         <div class="card-author">${escapeHtml(idea.idea_author || 'Anonymous')}</div>
         <div class="card-meta">${created}</div>
@@ -1366,6 +1414,26 @@ function renderIdeas() {
     `;
   }).join('');
 }
+
+// ===================== DELETE IDEA =====================
+window.deleteIdea = async function(ideaId) {
+  const idea = allIdeas.find(i => i.id === ideaId);
+  const name = idea?.automation_name || 'this idea';
+  if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+
+  try {
+    const { error } = await supabaseClient
+      .from('automation_ideas')
+      .delete()
+      .eq('id', ideaId);
+    if (error) throw error;
+    allIdeas = allIdeas.filter(i => i.id !== ideaId);
+    renderIdeas();
+  } catch(err) {
+    console.error('Delete error:', err);
+    alert('Failed to delete idea: ' + (err.message || 'unknown error'));
+  }
+};
 
 async function showDetailById(ideaId) {
   const idea = allIdeas.find(i => i.id === ideaId);
@@ -1379,9 +1447,22 @@ async function showDetailById(ideaId) {
 // ===================== RENDER: DETAIL VIEW =====================
 function showDetail(idea) {
   currentDetailIdea = idea;
+  detailReturnTab = activeTab;       // remember which tab opened this card
   showView('detail-view');
   renderDetail(idea);
 }
+
+window.goBackFromDetail = function() {
+  const tab = detailReturnTab || 'all';
+  if (tab === 'completed') {
+    switchTab('completed');
+  } else if (tab === 'rejected') {
+    switchTab('rejected');
+  } else {
+    // all, approved, digi, driver, hold — all live in dashboard-view
+    switchTab(tab);
+  }
+};
 
 function renderDetail(idea) {
   const container = document.getElementById('detail-body');
@@ -2013,7 +2094,18 @@ function openForm() {
   document.getElementById('f-speed').value = 5; document.getElementById('f-speed-val').innerText = 5;
   if (currentUser) {
     const name = currentUser.user_metadata?.full_name || currentUser.email || '';
-    document.getElementById('f-author').value = name;
+    const authorEl = document.getElementById('f-author');
+    authorEl.value = name;
+    authorEl.readOnly = true;
+    authorEl.classList.add('field-locked');
+    const hintEl = document.getElementById('f-author-lock-hint');
+    if (hintEl) hintEl.textContent = '🔒 auto-filled';
+  } else {
+    const authorEl = document.getElementById('f-author');
+    authorEl.readOnly = false;
+    authorEl.classList.remove('field-locked');
+    const hintEl = document.getElementById('f-author-lock-hint');
+    if (hintEl) hintEl.textContent = '';
   }
 }
 
@@ -2136,3 +2228,48 @@ window.showFunnelDetail = showFunnelDetail;
 window.refreshFunnelQueueDisplay = function() {
   renderFunnelQueue(lastFunnelQueueIdeas);
 };
+// ===================== NAV GROUP DROPDOWNS =====================
+window.toggleNavGroup = function(groupId) {
+  const dropdown = document.getElementById('nav-dropdown-' + groupId);
+  if (!dropdown) return;
+  const isOpen = dropdown.classList.contains('open');
+  // Close all first
+  document.querySelectorAll('.nav-group-dropdown.open').forEach(d => d.classList.remove('open'));
+  document.querySelectorAll('.nav-group-trigger.open').forEach(t => t.classList.remove('open'));
+  if (!isOpen) {
+    dropdown.classList.add('open');
+    const trigger = dropdown.previousElementSibling;
+    if (trigger) trigger.classList.add('open');
+  }
+};
+
+window.closeAllNavGroups = function() {
+  document.querySelectorAll('.nav-group-dropdown.open').forEach(d => d.classList.remove('open'));
+  document.querySelectorAll('.nav-group-trigger.open').forEach(t => t.classList.remove('open'));
+};
+
+// Close dropdowns when clicking outside
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.nav-group')) {
+    window.closeAllNavGroups();
+  }
+});
+
+// Highlight parent trigger when a dropdown child tab is active
+function syncNavGroupTriggerActive() {
+  document.querySelectorAll('.nav-group').forEach(group => {
+    const trigger = group.querySelector('.nav-group-trigger');
+    const hasActive = group.querySelector('.nav-dropdown-item.active');
+    if (trigger) trigger.classList.toggle('group-active', !!hasActive);
+  });
+}
+
+// Patch syncNavTabActive to also update group triggers
+const _origSyncNavTabActive = window.syncNavTabActive || (() => {});
+const _patchedSync = function(tab) {
+  document.querySelectorAll('.nav-tab, .nav-dropdown-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.tab === tab);
+  });
+  syncNavGroupTriggerActive();
+};
+window.syncNavTabActivePatched = _patchedSync;
