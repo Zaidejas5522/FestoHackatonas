@@ -98,6 +98,7 @@ let currentDetailIdea = null;
 let ideasChannel      = null;
 let activeTab         = 'all';
 let currentUserDepartmentId = null;
+let lastFunnelQueueIdeas = [];
 
 // ===================== FESTO EMAIL =====================
 /**
@@ -513,7 +514,7 @@ window.toggleTheme = function() {
 
 // ===================== UTILITY: SHOW/HIDE VIEWS =====================
 function showView(id) {
-  ['login-view','register-view','dashboard-view','detail-view','stats-view','funnel-view','funnel-detail-view'].forEach(v => {
+  ['login-view','register-view','dashboard-view','completed-view','detail-view','stats-view','funnel-view','funnel-detail-view'].forEach(v => {
     const el = document.getElementById(v);
     if (el) el.style.display = 'none';
   });
@@ -601,14 +602,54 @@ window.togglePassword = function(inputId, btn) {
 };
 
 // ===================== TAB SWITCHING =====================
-window.switchTab = function(tab) {
-  activeTab = tab;
+function syncNavTabActive(tab) {
   document.querySelectorAll('.nav-tab').forEach(el => {
     el.classList.toggle('active', el.dataset.tab === tab);
   });
+}
+
+function syncRoleNavTabs() {
+  const showDigi   = isDigiDriver() ? '' : 'none';
+  const showDriver = isDriver() ? '' : 'none';
+  ['digi-tab', 'completed-digi-tab'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = showDigi;
+  });
+  ['driver-tab', 'completed-driver-tab'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = showDriver;
+  });
+  ['hold-tab', 'completed-hold-tab'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = showDriver;
+  });
+}
+
+function syncUserDisplays(email) {
+  const text = email || '';
+  ['user-display', 'completed-user-display'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+  });
+}
+
+window.switchTab = function(tab) {
+  activeTab = tab;
+  if (tab === 'completed') {
+    showView('completed-view');
+    const email = currentUser?.email || currentUser?.user_metadata?.full_name || '';
+    syncUserDisplays(email);
+  } else {
+    showView('dashboard-view');
+  }
+  syncNavTabActive(tab);
   const newBtn = document.getElementById('new-idea-btn');
   if (newBtn) newBtn.style.display = tab === 'all' ? '' : 'none';
   renderIdeas();
+};
+
+window.showCompletedView = function() {
+  switchTab('completed');
 };
 
 async function showDashboard() {
@@ -620,7 +661,7 @@ async function showDashboard() {
 
   showView('dashboard-view');
   const email = currentUser?.email || currentUser?.user_metadata?.full_name || '';
-  document.getElementById('user-display').textContent = email;
+  syncUserDisplays(email);
 
   // Fetch current user's department ID from profiles table
   if (currentUser) {
@@ -636,23 +677,11 @@ async function showDashboard() {
     }
   }
 
-  // Show/hide Digi Driver tab based on role
-  const digiTab = document.getElementById('digi-tab');
-  if (digiTab) digiTab.style.display = isDigiDriver() ? '' : 'none';
-
-  // Show/hide Driver tab based on role
-  const driverTab = document.getElementById('driver-tab');
-  if (driverTab) driverTab.style.display = isDriver() ? '' : 'none';
-
-  // Show/hide On Hold tab only for drivers
-  const holdTab = document.getElementById('hold-tab');
-  if (holdTab) holdTab.style.display = isDriver() ? '' : 'none';
+  syncRoleNavTabs();
 
   // Reset to all-ideas tab
   activeTab = 'all';
-  document.querySelectorAll('.nav-tab').forEach(el => {
-    el.classList.toggle('active', el.dataset.tab === 'all');
-  });
+  syncNavTabActive('all');
   const newBtn = document.getElementById('new-idea-btn');
   if (newBtn) newBtn.style.display = '';
   fetchAndRenderIdeas();
@@ -736,26 +765,37 @@ async function fetchIdeasFromDB() {
 function renderFunnelQueue(ideas) {
   const grid = document.getElementById('funnel-queue-grid');
   if (!grid) return;
-  if (ideas.length === 0) {
+  lastFunnelQueueIdeas = ideas || [];
+  if (lastFunnelQueueIdeas.length === 0) {
     grid.innerHTML = `<div class="empty-state">✉ No ideas awaiting Funnel review right now.</div>`;
     return;
   }
-  grid.innerHTML = ideas.map(idea => {
+  const sortMode = document.getElementById('funnel-sort')?.value || 'date-desc';
+  const sorted = sortIdeasList(lastFunnelQueueIdeas, sortMode);
+  grid.innerHTML = sorted.map(idea => {
     const stage = getStageInfo(idea.status);
+    const hasScore = idea.ai_score != null;
+    const scoreBadge = hasScore
+      ? `<span class="ai-score-badge">${idea.ai_score}%</span>`
+      : `<span class="ai-score-badge">—</span>`;
+    const created = new Date(idea.created_at).toLocaleDateString(undefined, {
+      year: 'numeric', month: 'short', day: 'numeric',
+    });
+    const aiVerdict = idea.ai_status
+      ? `<span class="card-ai-verdict ai-decision--${idea.ai_status.toLowerCase()}">${escapeHtml(idea.ai_status)}</span>`
+      : '';
+
     return `
       <div class="idea-card" data-id="${idea.id}" onclick="showFunnelDetail('${idea.id}')">
         <div class="card-header-row">
           <div class="card-title">${escapeHtml(idea.automation_name || '—')}</div>
-          <span class="stage-badge ${stage.color}">${stage.icon} ${stage.label}</span>
+          ${scoreBadge}
         </div>
         <div class="card-author">${escapeHtml(idea.idea_author || 'Anonymous')}</div>
-        <div class="card-stats">
-          <div class="card-stat"><strong>${idea.weekly_hours != null ? idea.weekly_hours + 'h' : '—'}</strong> weekly hrs</div>
-          <div class="card-stat"><strong>${idea.standardized_process_score != null ? idea.standardized_process_score + '/10' : '—'}</strong> process std</div>
-        </div>
-        <div class="card-meta">
-          ${new Date(idea.created_at).toLocaleDateString()}
-          ${idea.digi_note ? ` • ⚑ Digi note attached` : ''}
+        <div class="card-meta">${created}${idea.digi_note ? ' · Note attached' : ''}</div>
+        <div class="card-footer-row">
+          <span class="card-stage">${escapeHtml(stage.label)}</span>
+          ${aiVerdict}
         </div>
       </div>`;
   }).join('');
@@ -1153,8 +1193,8 @@ function setCardRatingState(ideaId, state) {
     if (card.dataset.id === String(ideaId)) {
       const badge = card.querySelector('.ai-score-badge');
       if (badge) {
-        if (state === 'loading') { badge.className = 'ai-score-badge ai-rating'; badge.textContent = 'Rating…'; }
-        if (state === 'error')   { badge.className = 'ai-score-badge ai-error';  badge.textContent = 'AI error'; }
+        if (state === 'loading') { badge.className = 'ai-score-badge'; badge.textContent = '…'; }
+        if (state === 'error')   { badge.className = 'ai-score-badge'; badge.textContent = '—'; }
       }
     }
   });
@@ -1181,18 +1221,55 @@ function aiScoreColor(score) {
   return 'ai-score--low';
 }
 
+function compareIdeasByDateDesc(a, b) {
+  const ta = new Date(a.created_at).getTime() || 0;
+  const tb = new Date(b.created_at).getTime() || 0;
+  return tb - ta;
+}
+
+function sortIdeasList(list, mode) {
+  const sorted = [...list];
+  if (mode === 'ai-desc') {
+    sorted.sort((a, b) => {
+      const sa = a.ai_score;
+      const sb = b.ai_score;
+      if (sa == null && sb == null) return compareIdeasByDateDesc(a, b);
+      if (sa == null) return 1;
+      if (sb == null) return -1;
+      if (sb !== sa) return sb - sa;
+      return compareIdeasByDateDesc(a, b);
+    });
+  } else {
+    sorted.sort(compareIdeasByDateDesc);
+  }
+  return sorted;
+}
+
+function getIdeasListElements() {
+  const onCompleted = activeTab === 'completed';
+  return {
+    grid: document.getElementById(onCompleted ? 'completed-ideas-grid' : 'ideas-grid'),
+    search: document.getElementById(onCompleted ? 'completed-search' : 'search'),
+    sort: document.getElementById(onCompleted ? 'completed-sort' : 'ideas-sort'),
+    statusFilter: document.getElementById('status-filter'),
+    onCompleted,
+  };
+}
+
 function renderIdeas() {
-  const grid = document.getElementById('ideas-grid');
+  const { grid, search, sort, statusFilter, onCompleted } = getIdeasListElements();
   if (!grid) return;
 
-  const searchTerm   = (document.getElementById('search')?.value || '').toLowerCase();
-  const statusFilter = document.getElementById('status-filter')?.value || 'All';
+  const searchTerm   = (search?.value || '').toLowerCase();
+  const statusFilterVal = statusFilter?.value || 'All';
 
   let filtered = [...allIdeas];
 
   // Tab filter
-  if (activeTab === 'approved') {
-    filtered = filtered.filter(i => i.status === 'In Development' || i.status === 'Testing' || i.status === 'Implemented');
+  if (activeTab === 'completed') {
+    filtered = filtered.filter(i => i.status === 'Implemented');
+  } else if (activeTab === 'approved') {
+    filtered = filtered.filter(i => i.status === 'In Development' || i.status === 'Testing');
   } else if (activeTab === 'digi') {
     filtered = filtered.filter(i =>
       i.status === 'Awaiting Digi Approval' ||
@@ -1220,9 +1297,9 @@ function renderIdeas() {
     filtered = filtered.filter(i => i.status === 'Consulting with Driver');
   }
 
-  // Apply status filter (if not "All")
-  if (statusFilter !== 'All') {
-    filtered = filtered.filter(i => i.status === statusFilter);
+  // Apply status filter on dashboard tabs (not on Completed page)
+  if (!onCompleted && statusFilterVal !== 'All') {
+    filtered = filtered.filter(i => i.status === statusFilterVal);
   }
 
   // Apply search filter
@@ -1238,7 +1315,9 @@ function renderIdeas() {
   if (filtered.length === 0) {
     let msg = '✨ No ideas found. Create one!';
     if (activeTab === 'approved') {
-      msg = '⚙ No ideas currently in development or implemented yet.';
+      msg = '⚙ No ideas currently in development or testing.';
+    } else if (activeTab === 'completed') {
+      msg = '★ No fully implemented ideas yet.';
     } else if (activeTab === 'digi') {
       msg = '⚑ No ideas awaiting your approval right now.';
     } else if (activeTab === 'funnel') {
@@ -1254,19 +1333,22 @@ function renderIdeas() {
     return;
   }
 
+  const sortMode = sort?.value || 'date-desc';
+  const sorted = sortIdeasList(filtered, sortMode);
+
   // Render cards
-  grid.innerHTML = filtered.map(idea => {
+  grid.innerHTML = sorted.map(idea => {
     const hasScore = idea.ai_score != null;
     const scoreBadge = hasScore
-      ? `<div class="ai-score-badge ${aiScoreColor(idea.ai_score)}">${idea.ai_score}%</div>`
-      : `<div class="ai-score-badge ai-pending">Not rated</div>`;
+      ? `<span class="ai-score-badge">${idea.ai_score}%</span>`
+      : `<span class="ai-score-badge">—</span>`;
     const stage = getStageInfo(idea.status);
-
-    // Build author + department string
-    let authorDisplay = escapeHtml(idea.idea_author || 'Anonymous');
-    if (idea.departmentName) {
-      authorDisplay += `, Department: ${escapeHtml(idea.departmentName)}`;
-    }
+    const created = new Date(idea.created_at).toLocaleDateString(undefined, {
+      year: 'numeric', month: 'short', day: 'numeric',
+    });
+    const aiVerdict = idea.ai_status
+      ? `<span class="card-ai-verdict ai-decision--${idea.ai_status.toLowerCase()}">${escapeHtml(idea.ai_status)}</span>`
+      : '';
 
     return `
       <div class="idea-card" data-id="${idea.id}" data-status="${idea.status}" onclick="showDetailById('${idea.id}')">
@@ -1274,18 +1356,11 @@ function renderIdeas() {
           <div class="card-title">${escapeHtml(idea.automation_name || '—')}</div>
           ${scoreBadge}
         </div>
-        <div class="card-author">${authorDisplay}</div>
-        <div class="card-stats">
-          <div class="card-stat"><strong>${idea.weekly_hours != null ? idea.weekly_hours + 'h' : '—'}</strong> weekly hrs</div>
-          <div class="card-stat"><strong>${idea.standardized_process_score != null ? idea.standardized_process_score + '/10' : '—'}</strong> process std</div>
-          <div class="card-stat"><strong>${idea.speed_criticality != null ? idea.speed_criticality + '/10' : '—'}</strong> speed crit</div>
-        </div>
-        <div class="card-meta">
-          ${escapeHtml(idea.software_systems || '—')} systems • ${new Date(idea.created_at).toLocaleDateString()}
-        </div>
+        <div class="card-author">${escapeHtml(idea.idea_author || 'Anonymous')}</div>
+        <div class="card-meta">${created}</div>
         <div class="card-footer-row">
-          <span class="stage-badge ${stage.color}">${stage.icon} ${stage.label}</span>
-          ${idea.ai_status ? `<span class="ai-decision-label ai-decision--${idea.ai_status.toLowerCase()}">AI: ${idea.ai_status}</span>` : ''}
+          <span class="card-stage">${escapeHtml(stage.label)}</span>
+          ${aiVerdict}
         </div>
       </div>
     `;
@@ -2051,10 +2126,13 @@ window.toggleEditMode   = toggleEditMode;
 window.discardEdit      = discardEdit;
 window.saveEdit         = saveEdit;
 window.reRateIdea       = reRateIdea;
-window.switchTab        = switchTab;
+window.switchTab = switchTab;
 window.digiApprove      = digiApprove;
 window.digiReject       = digiReject;
 window.digiSendToFunnel = digiSendToFunnel;
 window.funnelApprove    = funnelApprove;
 window.funnelReject     = funnelReject;
 window.showFunnelDetail = showFunnelDetail;
+window.refreshFunnelQueueDisplay = function() {
+  renderFunnelQueue(lastFunnelQueueIdeas);
+};

@@ -3,10 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>IdeaFlow | Automation Ideas</title>
-  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+  <meta name="theme-color" content="#09090b">
+  <meta name="color-scheme" content="dark light">
+  <title>IdeaFlow | AI Automation Operations</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Syne:wght@700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 
@@ -14,18 +17,22 @@
 <div id="login-view" class="auth-view">
   <div class="auth-glow auth-glow--green"></div>
   <div class="auth-glow auth-glow--purple"></div>
+  <div class="auth-glow auth-glow--accent"></div>
 
-  <div class="auth-box">
-    <div class="auth-logo">idea<span>flow</span></div>
+  <div class="auth-box glass-panel">
+    <div class="auth-brand">
+      <div class="auth-logo">idea<span>flow</span></div>
+      <div class="auth-product-tag">AI Operations Platform</div>
+    </div>
     <div class="auth-tagline">Welcome back — sign in to continue</div>
 
     <div class="field-group">
-      <label>Email</label>
+      <label for="login-email">Email</label>
       <input type="text" id="login-email" placeholder="you@company.com" autocomplete="email">
     </div>
 
     <div class="field-group">
-      <label>Password</label>
+      <label for="login-password">Password</label>
       <div class="password-wrap">
         <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password">
         <button class="toggle-pw" onclick="togglePassword('login-password', this)" tabindex="-1" type="button">show</button>
@@ -37,7 +44,7 @@
     <div id="login-status" class="auth-status"></div>
 
     <div class="auth-switch">
-      No account? <a href="#" onclick="showView('register-view')">Create one</a>
+      No account? <a href="#" onclick="showView('register-view'); return false;">Create one</a>
     </div>
   </div>
 </div>
@@ -46,23 +53,27 @@
 <div id="register-view" class="auth-view" style="display:none;">
   <div class="auth-glow auth-glow--green"></div>
   <div class="auth-glow auth-glow--purple"></div>
+  <div class="auth-glow auth-glow--accent"></div>
 
-  <div class="auth-box">
-    <div class="auth-logo">idea<span>flow</span></div>
+  <div class="auth-box glass-panel">
+    <div class="auth-brand">
+      <div class="auth-logo">idea<span>flow</span></div>
+      <div class="auth-product-tag">AI Operations Platform</div>
+    </div>
     <div class="auth-tagline">Create your account to get started</div>
 
     <div class="field-group">
-      <label>Full Name</label>
+      <label for="reg-name">Full Name</label>
       <input type="text" id="reg-name" placeholder="Your name" autocomplete="name">
     </div>
 
     <div class="field-group">
-      <label>Email</label>
+      <label for="reg-email">Email</label>
       <input type="text" id="reg-email" placeholder="you@company.com" autocomplete="email">
     </div>
 
     <div class="field-group">
-      <label>Password</label>
+      <label for="reg-password">Password</label>
       <div class="password-wrap">
         <input type="password" id="reg-password" placeholder="At least 6 characters" autocomplete="new-password">
         <button class="toggle-pw" onclick="togglePassword('reg-password', this)" tabindex="-1" type="button">show</button>
@@ -70,7 +81,7 @@
     </div>
 
     <div class="field-group">
-      <label>Confirm Password</label>
+      <label for="reg-password2">Confirm Password</label>
       <div class="password-wrap">
         <input type="password" id="reg-password2" placeholder="Repeat password" autocomplete="new-password">
         <button class="toggle-pw" onclick="togglePassword('reg-password2', this)" tabindex="-1" type="button">show</button>
@@ -82,202 +93,285 @@
     <div id="register-status" class="auth-status"></div>
 
     <div class="auth-switch">
-      Already have an account? <a href="#" onclick="showView('login-view')">Sign in</a>
+      Already have an account? <a href="#" onclick="showView('login-view'); return false;">Sign in</a>
     </div>
   </div>
 </div>
 
 <!-- ── DASHBOARD VIEW ──────────────────────────────── -->
-<div id="dashboard-view" style="display:none; min-height:100vh;">
-  <div class="topbar">
+<div id="dashboard-view" class="app-shell" style="display:none;">
+  <header class="topbar glass-bar">
     <div class="topbar-left">
       <div class="topbar-logo">idea<span>flow</span></div>
-      <nav class="topbar-nav">
+      <nav class="topbar-nav" aria-label="Main navigation">
         <button class="nav-tab active" data-tab="all" onclick="switchTab('all')">All Ideas</button>
-        <button class="nav-tab" data-tab="approved" onclick="switchTab('approved')">⚙ In Progress</button>
-        <button class="nav-tab nav-tab--digi" id="digi-tab" data-tab="digi" onclick="switchTab('digi')" style="display:none">⚑ Digi Queue</button>
-        <button class="nav-tab nav-tab--driver" id="driver-tab" data-tab="driver" onclick="switchTab('driver')" style="display:none">Driver Review </button>
-        <button class="nav-tab nav-tab--hold" id="hold-tab" data-tab="hold" onclick="switchTab('hold')" style="display:none">⏸ On Hold</button>
-        <button class="nav-tab" id="stats-tab" data-tab="stats" onclick="showStatsView()">📊 Statistics</button>
+        <button class="nav-tab" data-tab="approved" onclick="switchTab('approved')">In Progress</button>
+        <button class="nav-tab nav-tab--completed" data-tab="completed" onclick="switchTab('completed')">Completed</button>
+        <button class="nav-tab nav-tab--digi" id="digi-tab" data-tab="digi" onclick="switchTab('digi')" style="display:none">Digi Queue</button>
+        <button class="nav-tab nav-tab--driver" id="driver-tab" data-tab="driver" onclick="switchTab('driver')" style="display:none">Driver Review</button>
+        <button class="nav-tab nav-tab--hold" id="hold-tab" data-tab="hold" onclick="switchTab('hold')" style="display:none">On Hold</button>
+        <button class="nav-tab" id="stats-tab" data-tab="stats" onclick="showStatsView()">Statistics</button>
       </nav>
     </div>
     <div class="topbar-right">
       <div class="topbar-user">signed in as <strong id="user-display"></strong></div>
-      <button class="btn-theme" id="theme-toggle" onclick="toggleTheme()" title="Toggle theme">🌙</button>
-      <button class="btn-logout" onclick="handleLogout()">Sign out</button>
+      <button class="btn-theme" id="theme-toggle" onclick="toggleTheme()" title="Toggle theme" type="button" aria-label="Toggle theme">🌙</button>
+      <button class="btn-logout" onclick="handleLogout()" type="button">Sign out</button>
     </div>
-  </div>
-  <div class="dashboard-body">
-    <div class="controls">
-      <input type="text" id="search" placeholder="Search ideas or author…" oninput="renderIdeas()">
-      <select id="status-filter" onchange="renderIdeas()">
-        <option value="All">All Stages</option>
-        <option value="Submitted">Submitted</option>
-        <option value="AI Review">AI Review</option>
-        <option value="Awaiting Digi Approval">Awaiting Digi Approval</option>
-        <option value="Awaiting Funnel Response">Awaiting Funnel Response</option>
-        <option value="Funnel Submitted">Funnel Submitted</option>
-        <option value="In Development">In Development</option>
-        <option value="Testing">Testing</option>
-        <option value="Implemented">Implemented</option>
-        <option value="Rejected">Rejected</option>
-      </select>
-      <button class="btn btn-new btn-sm" id="new-idea-btn" onclick="openForm()">+ New Idea</button>
-    </div>
+  </header>
+
+  <main class="dashboard-body">
+    <header class="page-header">
+      <div class="page-header-text">
+        <p class="page-eyebrow">Automation pipeline</p>
+        <h1 class="page-title">Ideas dashboard</h1>
+      </div>
+      <div class="controls glass-panel controls-bar">
+        <div class="control-search-wrap">
+          <span class="control-icon" aria-hidden="true">⌕</span>
+          <input type="text" id="search" placeholder="Search ideas or author…" oninput="renderIdeas()">
+        </div>
+        <select id="ideas-sort" onchange="renderIdeas()" aria-label="Sort ideas">
+          <option value="date-desc">Newest first</option>
+          <option value="ai-desc">Highest AI %</option>
+        </select>
+        <select id="status-filter" onchange="renderIdeas()" aria-label="Filter by stage">
+          <option value="All">All Stages</option>
+          <option value="Submitted">Submitted</option>
+          <option value="AI Review">AI Review</option>
+          <option value="Awaiting Digi Approval">Awaiting Digi Approval</option>
+          <option value="Awaiting Funnel Response">Awaiting Funnel Response</option>
+          <option value="Funnel Submitted">Funnel Submitted</option>
+          <option value="In Development">In Development</option>
+          <option value="Testing">Testing</option>
+          <option value="Implemented">Implemented</option>
+          <option value="Rejected">Rejected</option>
+        </select>
+        <button class="btn btn-new btn-sm" id="new-idea-btn" onclick="openForm()" type="button">+ New Idea</button>
+      </div>
+    </header>
     <div class="ideas-grid" id="ideas-grid"></div>
-  </div>
+  </main>
+</div>
+
+<!-- ── COMPLETED VIEW ──────────────────────────────── -->
+<div id="completed-view" class="app-shell" style="display:none;">
+  <header class="topbar glass-bar">
+    <div class="topbar-left">
+      <div class="topbar-logo">idea<span>flow</span></div>
+      <nav class="topbar-nav" aria-label="Main navigation">
+        <button class="nav-tab" data-tab="all" onclick="switchTab('all')">All Ideas</button>
+        <button class="nav-tab" data-tab="approved" onclick="switchTab('approved')">In Progress</button>
+        <button class="nav-tab nav-tab--completed" data-tab="completed" onclick="switchTab('completed')">Completed</button>
+        <button class="nav-tab nav-tab--digi" id="completed-digi-tab" data-tab="digi" onclick="switchTab('digi')" style="display:none">Digi Queue</button>
+        <button class="nav-tab nav-tab--driver" id="completed-driver-tab" data-tab="driver" onclick="switchTab('driver')" style="display:none">Driver Review</button>
+        <button class="nav-tab nav-tab--hold" id="completed-hold-tab" data-tab="hold" onclick="switchTab('hold')" style="display:none">On Hold</button>
+        <button class="nav-tab" data-tab="stats" onclick="showStatsView()">Statistics</button>
+      </nav>
+    </div>
+    <div class="topbar-right">
+      <div class="topbar-user">signed in as <strong id="completed-user-display"></strong></div>
+      <button class="btn-theme theme-toggle-secondary" onclick="toggleTheme()" title="Toggle theme" type="button" aria-label="Toggle theme">🌙</button>
+      <button class="btn-logout" onclick="handleLogout()" type="button">Sign out</button>
+    </div>
+  </header>
+
+  <main class="dashboard-body">
+    <header class="page-header">
+      <div class="page-header-text">
+        <p class="page-eyebrow">Delivered automations</p>
+        <h1 class="page-title">Completed</h1>
+      </div>
+      <div class="controls glass-panel controls-bar">
+        <div class="control-search-wrap">
+          <span class="control-icon" aria-hidden="true">⌕</span>
+          <input type="text" id="completed-search" placeholder="Search completed ideas…" oninput="renderIdeas()">
+        </div>
+        <select id="completed-sort" onchange="renderIdeas()" aria-label="Sort completed ideas">
+          <option value="date-desc">Newest first</option>
+          <option value="ai-desc">Highest AI %</option>
+        </select>
+      </div>
+    </header>
+    <div class="ideas-grid" id="completed-ideas-grid"></div>
+  </main>
 </div>
 
 <!-- ── DETAIL VIEW ─────────────────────────────────── -->
-<div id="detail-view" style="display:none; min-height:100vh;">
-  <div class="detail-topbar">
-    <button class="btn btn-back btn-sm" onclick="showDashboard()">← Back</button>
-    <div style="font-size:12px;color:var(--muted);letter-spacing:.06em;">AUTOMATION IDEA DETAIL</div>
-  </div>
+<div id="detail-view" class="app-shell" style="display:none;">
+  <header class="detail-topbar glass-bar">
+    <button class="btn btn-back btn-sm" onclick="showDashboard()" type="button">← Back</button>
+    <p class="page-eyebrow">Automation idea detail</p>
+  </header>
   <div class="detail-body" id="detail-body"></div>
 </div>
 
 <!-- ── FUNNEL VIEW ────────────────────────────────── -->
-<div id="funnel-view" style="display:none; min-height:100vh;">
-  <div class="topbar">
+<div id="funnel-view" class="app-shell" style="display:none;">
+  <header class="topbar glass-bar">
     <div class="topbar-left">
       <div class="topbar-logo">idea<span>flow</span></div>
-      <nav class="topbar-nav">
-        <button class="nav-tab active">✉ Funnel Queue</button>
+      <nav class="topbar-nav" aria-label="Funnel navigation">
+        <button class="nav-tab active" type="button">Funnel Queue</button>
       </nav>
     </div>
     <div class="topbar-right">
       <div class="topbar-user">signed in as <strong id="funnel-user-display"></strong></div>
-      <button class="btn-theme" id="theme-toggle-funnel" onclick="toggleTheme()" title="Toggle theme">🌙</button>
-      <button class="btn-logout" onclick="handleLogout()">Sign out</button>
+      <button class="btn-theme theme-toggle-secondary" id="theme-toggle-funnel" onclick="toggleTheme()" title="Toggle theme" type="button" aria-label="Toggle theme">🌙</button>
+      <button class="btn-logout" onclick="handleLogout()" type="button">Sign out</button>
     </div>
-  </div>
-  <div class="dashboard-body">
+  </header>
+  <main class="dashboard-body">
+    <header class="page-header page-header--compact">
+      <div class="page-header-text">
+        <p class="page-eyebrow">Sales funnel</p>
+        <h1 class="page-title">Review queue</h1>
+      </div>
+      <div class="controls glass-panel controls-bar controls-bar--compact">
+        <select id="funnel-sort" onchange="refreshFunnelQueueDisplay()" aria-label="Sort funnel queue">
+          <option value="date-desc">Newest first</option>
+          <option value="ai-desc">Highest AI %</option>
+        </select>
+      </div>
+    </header>
     <div class="ideas-grid" id="funnel-queue-grid"></div>
-  </div>
+  </main>
 </div>
 
 <!-- ── FUNNEL DETAIL VIEW ──────────────────────────── -->
-<div id="funnel-detail-view" style="display:none; min-height:100vh;">
-  <div class="detail-topbar">
-    <button class="btn btn-back btn-sm" onclick="showFunnelDashboardView()">← Back</button>
-    <div style="font-size:12px;color:var(--muted);letter-spacing:.06em;">FUNNEL REVIEW</div>
-  </div>
+<div id="funnel-detail-view" class="app-shell" style="display:none;">
+  <header class="detail-topbar glass-bar">
+    <button class="btn btn-back btn-sm" onclick="showFunnelDashboardView()" type="button">← Back</button>
+    <p class="page-eyebrow">Funnel review</p>
+  </header>
   <div class="detail-body" id="funnel-detail-body"></div>
-</div> <!-- ← missing closing tag added -->
+</div>
 
 <!-- ── STATISTICS VIEW ───────────────────────────────── -->
-<div id="stats-view" style="display:none; min-height:100vh;">
-  <div class="stats-topbar">
-    <button class="btn btn-back btn-sm" onclick="showDashboard()">← Back to Dashboard</button>
-    <div style="font-size:12px;color:var(--muted);letter-spacing:.06em;">IDEA STATISTICS</div>
-  </div>
+<div id="stats-view" class="app-shell" style="display:none;">
+  <header class="stats-topbar glass-bar">
+    <button class="btn btn-back btn-sm" onclick="showDashboard()" type="button">← Back to Dashboard</button>
+    <p class="page-eyebrow">Analytics</p>
+  </header>
   <div class="stats-container">
-    <!-- Filter bar -->
-    <div class="stats-filters">
+    <header class="page-header page-header--compact">
+      <div class="page-header-text">
+        <p class="page-eyebrow">Performance insights</p>
+        <h1 class="page-title">Idea statistics</h1>
+      </div>
+    </header>
+
+    <div class="stats-filters glass-panel">
       <div class="filter-group">
-        <label>Department</label>
+        <label for="stats-dept-select">Department</label>
         <select id="stats-dept-select">
           <option value="">Loading departments...</option>
         </select>
       </div>
       <div class="filter-group">
-        <label>User (email or name)</label>
+        <label for="stats-user-input">User (email or name)</label>
         <input type="text" id="stats-user-input" list="stats-user-datalist" placeholder="Type to search user...">
         <datalist id="stats-user-datalist"></datalist>
       </div>
-      <div class="filter-group">
-        <button id="stats-reset-btn" class="btn btn-sm">Reset filters</button>
+      <div class="filter-group filter-group--action">
+        <label class="filter-label-spacer" aria-hidden="true">&nbsp;</label>
+        <button id="stats-reset-btn" class="btn btn-sm btn-ghost" type="button">Reset filters</button>
       </div>
     </div>
 
-    <!-- Statistics cards -->
     <div class="stats-cards">
-      <div class="stat-card">
+      <div class="stat-card glass-panel">
         <div class="stat-number" id="stat-total">0</div>
         <div class="stat-label">Total Ideas</div>
       </div>
-      <div class="stat-card">
+      <div class="stat-card glass-panel">
         <div class="stat-number" id="stat-development">0</div>
         <div class="stat-label">In Development / Testing / Implemented</div>
       </div>
-      <div class="stat-card">
+      <div class="stat-card glass-panel">
         <div class="stat-number" id="stat-implemented">0</div>
         <div class="stat-label">Fully Implemented</div>
       </div>
     </div>
-    <div class="chart-container">
+    <div class="chart-container glass-panel">
       <canvas id="scoreChart" width="800" height="400"></canvas>
     </div>
   </div>
 </div>
 
 <!-- ── MODAL ───────────────────────────────────────── -->
-<div id="modal-overlay">
-  <div class="modal-box">
-    <div class="modal-title">New Automation Idea</div>
-
-    <div class="modal-section-label">§1 — Basic Info</div>
-    <label>Your Name / Author</label>
-    <input type="text" id="f-author" placeholder="Full name">
-    <label>Automation Name</label>
-    <input type="text" id="f-name" placeholder="Short descriptive title">
-    <label>Description</label>
-    <textarea id="f-desc" placeholder="Describe the process to automate…"></textarea>
-
-    <div class="modal-section-label">§2 — Complexity</div>
-    <label>Standardized Process Score (0–10)</label>
-    <div class="range-wrapper">
-      <input type="range" id="f-std" min="0" max="10" value="5" oninput="document.getElementById('f-std-val').innerText=this.value">
-      <span class="range-val" id="f-std-val">5</span>
-    </div>
-    <label>Digital Input?</label>
-    <select id="f-digital">
-      <option value="">Select…</option>
-      <option>Yes</option><option>No</option><option>Maybe</option>
-    </select>
-    <label>Rule-Based?</label>
-    <select id="f-rule">
-      <option value="">Select…</option>
-      <option>Yes</option><option>No</option><option>Maybe</option>
-    </select>
-    <label>Software Systems Involved</label>
-    <select id="f-systems">
-      <option value="">Select…</option>
-      <option value="1 or less">1 or less</option>
-      <option value="2">2</option>
-      <option value="3">3</option>
-      <option value="4 or more">4 or more</option>
-    </select>
-
-    <div class="modal-section-label">§3 — Impact</div>
-    <label>Weekly Hours Saved (estimate)</label>
-    <input type="number" id="f-hours" placeholder="e.g. 4.5" min="0" step="0.5">
-    <label>Speed Criticality (0–10)</label>
-    <div class="range-wrapper">
-      <input type="range" id="f-speed" min="0" max="10" value="5" oninput="document.getElementById('f-speed-val').innerText=this.value">
-      <span class="range-val" id="f-speed-val">5</span>
+<div id="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+  <div class="modal-box glass-panel">
+    <div class="modal-header">
+      <div>
+        <p class="page-eyebrow modal-eyebrow">New submission</p>
+        <div class="modal-title" id="modal-title">New Automation Idea</div>
+      </div>
+      <button class="modal-close" onclick="closeForm()" type="button" aria-label="Close dialog">×</button>
     </div>
 
-    <div class="modal-section-label">§4 — Implementation</div>
-    <label>Test Data Available?</label>
-    <select id="f-testdata">
-      <option value="">Select…</option>
-      <option>Yes</option><option>No</option>
-    </select>
-    <label>Process Documented?</label>
-    <select id="f-documented">
-      <option value="">Select…</option>
-      <option>Yes</option><option>No</option>
-    </select>
+    <div class="modal-body">
+      <div class="modal-section-label">Step 1 — Basic Info</div>
+      <label for="f-author">Your Name / Author</label>
+      <input type="text" id="f-author" placeholder="Full name">
+      <label for="f-name">Automation Name</label>
+      <input type="text" id="f-name" placeholder="Short descriptive title">
+      <label for="f-desc">Description</label>
+      <textarea id="f-desc" placeholder="Describe the process to automate…"></textarea>
+
+      <div class="modal-section-label">Step 2 — Complexity</div>
+      <label for="f-std">Standardized Process Score (0–10)</label>
+      <div class="range-wrapper">
+        <input type="range" id="f-std" min="0" max="10" value="5" oninput="document.getElementById('f-std-val').innerText=this.value">
+        <span class="range-val" id="f-std-val">5</span>
+      </div>
+      <label for="f-digital">Digital Input?</label>
+      <select id="f-digital">
+        <option value="">Select…</option>
+        <option>Yes</option><option>No</option><option>Maybe</option>
+      </select>
+      <label for="f-rule">Rule-Based?</label>
+      <select id="f-rule">
+        <option value="">Select…</option>
+        <option>Yes</option><option>No</option><option>Maybe</option>
+      </select>
+      <label for="f-systems">Software Systems Involved</label>
+      <select id="f-systems">
+        <option value="">Select…</option>
+        <option value="1 or less">1 or less</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4 or more">4 or more</option>
+      </select>
+
+      <div class="modal-section-label">Step 3 — Impact</div>
+      <label for="f-hours">Weekly Hours Saved (estimate)</label>
+      <input type="number" id="f-hours" placeholder="e.g. 4.5" min="0" step="0.5">
+      <label for="f-speed">Speed Criticality (0–10)</label>
+      <div class="range-wrapper">
+        <input type="range" id="f-speed" min="0" max="10" value="5" oninput="document.getElementById('f-speed-val').innerText=this.value">
+        <span class="range-val" id="f-speed-val">5</span>
+      </div>
+
+      <div class="modal-section-label">Step 4 — Implementation</div>
+      <label for="f-testdata">Test Data Available?</label>
+      <select id="f-testdata">
+        <option value="">Select…</option>
+        <option>Yes</option><option>No</option>
+      </select>
+      <label for="f-documented">Process Documented?</label>
+      <select id="f-documented">
+        <option value="">Select…</option>
+        <option>Yes</option><option>No</option>
+      </select>
+    </div>
 
     <div class="modal-actions">
-      <button class="btn btn-cancel btn-sm" onclick="closeForm()">Cancel</button>
-      <button class="btn btn-submit btn-sm" onclick="submitIdea()">Submit Idea</button>
+      <button class="btn btn-cancel btn-sm" onclick="closeForm()" type="button">Cancel</button>
+      <button class="btn btn-submit btn-sm" onclick="submitIdea()" type="button">Submit Idea</button>
     </div>
   </div>
 </div>
-
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
