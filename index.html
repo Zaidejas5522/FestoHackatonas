@@ -138,6 +138,33 @@
   <div class="detail-body" id="detail-body"></div>
 </div>
 
+<!-- ── FUNNEL VIEW ─────────────────────────────────── -->
+<div id="funnel-view" style="display:none; min-height:100vh;">
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="topbar-logo">idea<span>flow</span></div>
+      <nav class="topbar-nav">
+        <button class="nav-tab active">✉ Funnel Queue</button>
+      </nav>
+    </div>
+    <div class="topbar-right">
+      <div class="topbar-user">signed in as <strong id="funnel-user-display"></strong></div>
+      <button class="btn-theme" id="funnel-theme-toggle" onclick="toggleTheme()" title="Toggle theme">🌙</button>
+      <button class="btn-logout" onclick="handleLogout()">Sign out</button>
+    </div>
+  </div>
+  <div class="dashboard-body">
+    <div class="ideas-grid" id="funnel-queue-grid"></div>
+  </div>
+</div>
+
+<!-- ── FUNNEL DETAIL VIEW ──────────────────────────── -->
+<div id="funnel-detail-view" style="display:none; min-height:100vh;">
+  <div class="detail-topbar">
+    <button class="btn btn-back btn-sm" onclick="showFunnelDashboardView()">← Back</button>
+    <div style="font-size:12px;color:var(--muted);letter-spacing:.06em;">FUNNEL REVIEW</div>
+  </div>
+  <div class="detail-body" id="funnel-detail-body"></div>
 <!-- ── STATISTICS VIEW ───────────────────────────────── -->
 <div id="stats-view" style="display:none; min-height:100vh;">
   <div class="stats-topbar">
