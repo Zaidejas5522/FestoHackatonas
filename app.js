@@ -317,13 +317,13 @@ function emailFunnelAssigned(idea, digiNote) {
   };
 }
 
-// ── NEW: email to idea creator when sent to funnel ─────────────────────────────
+// ── email to idea creator when sent to funnel ──────────────────────────────────
 function emailCreatorSentToFunnel(idea, digiNote) {
   return {
-    subject: `[IdeaFlow] ↗ Your idea is under Funnel review: ${idea.automation_name}`,
+    subject: `[IdeaFlow] ↗ Action required — complete the Sales Funnel form: ${idea.automation_name}`,
     htmlBody: emailBase(`
-      <h2>↗ Your Idea Is Being Reviewed</h2>
-      <p>The Digi Community Driver has forwarded your automation idea for further Funnel review.</p>
+      <h2>↗ Action Required — Sales Funnel Questionnaire</h2>
+      <p>The Digi Community Driver has forwarded your automation idea for Funnel review and needs you to fill out a short questionnaire before a decision can be made.</p>
       <div class="idea-box">
         <div class="label">Idea Name</div>
         <div class="value">${escapeHtml(idea.automation_name)}</div>
@@ -333,7 +333,9 @@ function emailCreatorSentToFunnel(idea, digiNote) {
         <div class="label">Note from Digi Driver</div>
         <div class="value" style="font-size:13px;font-weight:400;line-height:1.6;color:#f7c948;">${escapeHtml(digiNote)}</div>
       </div>` : ''}
-      <p>The Funnel reviewer will assess your idea and you'll be notified once a decision has been made. You can track your idea's status in IdeaFlow at any time.</p>
+      <p><strong>What you need to do:</strong> Log in to IdeaFlow, open your idea "<strong>${escapeHtml(idea.automation_name)}</strong>", and complete the Sales Funnel questionnaire that will appear on the page.</p>
+      <a class="btn" href="http://localhost:5500/index.html">↗ Open IdeaFlow &amp; Fill Out Form</a>
+      <p style="margin-top:20px;font-size:13px;">The Funnel reviewer is waiting for your response. Once you submit, they will be notified and make a final decision.</p>
     `),
   };
 }
@@ -1314,17 +1316,31 @@ function renderDetail(idea) {
             <button class="btn-reject-stage" onclick="changeStatus('${idea.id}', 'Rejected')">✗ Reject</button>
           </div>` : ''}
       ` : idea.status === 'Awaiting Funnel Response' ? `
-        <div class="digi-funnel-sent">
-          <span class="digi-funnel-sent-icon">✉</span>
-          <span>Sales Funnel request sent — waiting for the creator to complete the form.
-            ${isDigiDriver() ? `<br><small style="opacity:.7">Once they submit, you can approve for development.</small>` : ''}
-          </span>
-        </div>
-        ${isDigiDriver() ? `
-          <div class="pipeline-actions" style="margin-top:12px">
-            <button class="btn-advance" onclick="changeStatus('${idea.id}', 'In Development')">✓ Approve for Development</button>
-            <button class="btn-reject-stage" onclick="digiReject('${idea.id}')">✗ Reject</button>
-          </div>` : ''}
+        ${currentUser && idea.submitter_email === currentUser.email ? `
+          <div class="digi-approval-box" style="border-color:rgba(200,247,74,.3);">
+            <div class="digi-approval-label" style="color:var(--accent);">↗ Sales Funnel Questionnaire — Action Required</div>
+            <p style="font-size:13px;color:var(--muted);margin:0 0 14px;">Please answer the questions below so the Funnel reviewer can make a decision on your idea.</p>
+            <label style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:4px;">What is the core business problem this solves?</label>
+            <textarea id="fq-problem" placeholder="Describe the pain point or inefficiency…" rows="3" style="width:100%;box-sizing:border-box;margin-bottom:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px 12px;font-size:13px;resize:vertical;"></textarea>
+            <label style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:4px;">What is the expected outcome / benefit?</label>
+            <textarea id="fq-outcome" placeholder="What would success look like…" rows="3" style="width:100%;box-sizing:border-box;margin-bottom:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px 12px;font-size:13px;resize:vertical;"></textarea>
+            <label style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:4px;">Priority / urgency — why does this matter now?</label>
+            <textarea id="fq-priority" placeholder="Is there a deadline, a compliance need, a bottleneck…" rows="2" style="width:100%;box-sizing:border-box;margin-bottom:16px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px 12px;font-size:13px;resize:vertical;"></textarea>
+            <button class="btn-advance" id="fq-submit-btn" onclick="submitFunnelQuestionnaire('${idea.id}')">↗ Submit Questionnaire</button>
+          </div>
+        ` : `
+          <div class="digi-funnel-sent">
+            <span class="digi-funnel-sent-icon">✉</span>
+            <span>Sales Funnel request sent — waiting for the creator to complete the form.
+              ${isDigiDriver() ? `<br><small style="opacity:.7">Once they submit, you can approve for development.</small>` : ''}
+            </span>
+          </div>
+          ${isDigiDriver() ? `
+            <div class="pipeline-actions" style="margin-top:12px">
+              <button class="btn-advance" onclick="changeStatus('${idea.id}', 'In Development')">✓ Approve for Development</button>
+              <button class="btn-reject-stage" onclick="digiReject('${idea.id}')">✗ Reject</button>
+            </div>` : ''}
+        `}
       ` : idea.status === 'Awaiting Digi Approval' ? `
         ${isDigiDriver() ? `
           <div class="digi-approval-box">
@@ -1551,6 +1567,54 @@ window.digiSendToFunnel = async function(ideaId) {
     console.error('Send to funnel error', err);
     alert('Failed to send funnel request: ' + (err.message || 'unknown'));
     if (btn) { btn.disabled = false; btn.textContent = '↗ Send to Sales Funnel'; }
+  }
+};
+
+// ===================== FUNNEL QUESTIONNAIRE (SUBMITTER) =====================
+window.submitFunnelQuestionnaire = async function(ideaId) {
+  const problem  = document.getElementById('fq-problem')?.value.trim();
+  const outcome  = document.getElementById('fq-outcome')?.value.trim();
+  const priority = document.getElementById('fq-priority')?.value.trim();
+
+  if (!problem)  { alert('Please describe the core business problem.'); return; }
+  if (!outcome)  { alert('Please describe the expected outcome.'); return; }
+  if (!priority) { alert('Please describe the priority / urgency.'); return; }
+
+  const btn = document.getElementById('fq-submit-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Submitting…'; }
+
+  try {
+    const idea = allIdeas.find(i => i.id === ideaId) || currentDetailIdea;
+    if (!idea) throw new Error('Idea not found');
+
+    // 1. Insert funnel response row
+    const { error: insertError } = await supabaseClient
+      .from('funnel_responses')
+      .insert([{ idea_id: ideaId, answer_problem: problem, answer_outcome: outcome, answer_priority: priority }]);
+    if (insertError) throw insertError;
+
+    // 2. Advance idea status to Funnel Submitted
+    const { error: updateError } = await supabaseClient
+      .from('automation_ideas')
+      .update({ status: 'Funnel Submitted' })
+      .eq('id', ideaId);
+    if (updateError) throw updateError;
+
+    // 3. Email funnel reviewer(s)
+    const answers = { answer_problem: problem, answer_outcome: outcome, answer_priority: priority };
+    if (FUNNEL_EMAILS.length > 0) {
+      const { subject, htmlBody } = emailFunnelSubmitted(idea, answers);
+      sendFestoEmail({ subject, htmlBody, recipients: FUNNEL_EMAILS });
+    }
+
+    // 4. Refresh UI
+    currentDetailIdea = { ...currentDetailIdea, status: 'Funnel Submitted' };
+    await fetchAndRenderIdeas();
+    renderDetail(currentDetailIdea);
+  } catch(err) {
+    console.error('Funnel questionnaire submit error', err);
+    alert('Failed to submit questionnaire: ' + (err.message || 'unknown'));
+    if (btn) { btn.disabled = false; btn.textContent = '↗ Submit Questionnaire'; }
   }
 };
 
