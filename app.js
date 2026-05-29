@@ -449,6 +449,8 @@ function renderIdeas() {
       i.status === 'Awaiting Funnel Response' ||
       i.status === 'Funnel Submitted'
     );
+  } else if (activeTab === 'driver') {
+    filtered = filtered.filter(i => i.status === 'Driver Review');
   }
 
   if (statusFilter !== 'All') filtered = filtered.filter(i => i.status === statusFilter);
@@ -461,11 +463,14 @@ function renderIdeas() {
   }
 
   if (filtered.length === 0) {
-    const msg = activeTab === 'approved'
-      ? '⚙ No ideas currently in development or implemented yet.'
-      : activeTab === 'digi'
-      ? '⚑ No ideas awaiting your approval right now.'
-      : '✨ No ideas found. Create one!';
+    let msg = '✨ No ideas found. Create one!';
+    if (activeTab === 'approved') {
+      msg = '⚙ No ideas currently in development or implemented yet.';
+    } else if (activeTab === 'digi') {
+      msg = '⚑ No ideas awaiting your approval right now.';
+    } else if (activeTab === 'driver') {
+      msg = '🎯 No ideas awaiting driver review.';
+    }
     grid.innerHTML = `<div class="empty-state">${msg}</div>`;
     return;
   }
