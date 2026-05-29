@@ -21,16 +21,15 @@ const AI_SCORE_THRESHOLD = 60;
 
 // ===================== PIPELINE STAGES =====================
 const PIPELINE_STAGES = [
-  { key: 'Submitted',              label: 'Submitted',          icon: '✦', color: 'stage-submitted'   },
-  { key: 'AI Review',              label: 'AI Review',          icon: '⟳', color: 'stage-review'      },
-  { key: 'Driver Review',          label: 'Driver Review',      icon: '🎯', color: 'stage-driver'     }, 
-  { key: 'Awaiting Digi Approval', label: 'Digi Approval',      icon: '⚑', color: 'stage-digi'        },
-  { key: 'Awaiting Funnel Response',label: 'Funnel Response',    icon: '✉', color: 'stage-funnel'      },
-  { key: 'Funnel Submitted',        label: 'Funnel Submitted',   icon: '↗', color: 'stage-funnel-done' },
-  { key: 'In Development',         label: 'In Development',     icon: '⚙', color: 'stage-development' },
-  { key: 'Testing',                label: 'Testing',            icon: '⚗', color: 'stage-testing'     },
-  { key: 'Implemented',            label: 'Implemented',        icon: '★', color: 'stage-implemented' },
-  { key: 'Rejected',               label: 'Rejected',           icon: '✗', color: 'stage-rejected'    },
+  { key: 'Submitted',               label: 'Submitted',         icon: '✦', color: 'stage-submitted'   },
+  { key: 'AI Review',               label: 'AI Review',         icon: '⟳', color: 'stage-review'      },
+  { key: 'Awaiting Digi Approval',  label: 'Digi Approval',     icon: '⚑', color: 'stage-digi'        },
+  { key: 'Awaiting Funnel Response',label: 'Funnel Response',   icon: '✉', color: 'stage-funnel'      },
+  { key: 'Funnel Submitted',        label: 'Funnel Submitted',  icon: '↗', color: 'stage-funnel-done' },
+  { key: 'In Development',          label: 'In Development',    icon: '⚙', color: 'stage-development' },
+  { key: 'Testing',                 label: 'Testing',           icon: '⚗', color: 'stage-testing'     },
+  { key: 'Implemented',             label: 'Implemented',       icon: '★', color: 'stage-implemented' },
+  { key: 'Rejected',                label: 'Rejected',          icon: '✗', color: 'stage-rejected'    },
 ];
 
 // ===================== DIGI DRIVER ROLE =====================
@@ -39,20 +38,23 @@ const DIGI_DRIVER_EMAILS = [
   'lt6u7091@festo.net' // ← replace with real Digi Driver email(s)
   // 'another@festo.com',
 ];
-// ===================== DRIVER ROLE =====================
-const DRIVER_EMAILS = [
-  'driver@festo.com',   // ← replace with the real Digi Driver email
-  // 'another@festo.com',   // add more if needed
-];
 
 function isDigiDriver() {
   const email = currentUser?.email || '';
   return DIGI_DRIVER_EMAILS.includes(email.toLowerCase());
 }
-function isDriver() {
+
+// ===================== FUNNEL ROLE =====================
+const FUNNEL_EMAILS = [
+  'funnel@festo.com',
+  // 'anotherfunnel@festo.com',  ← add real Funnel reviewer email(s) here
+];
+
+function isFunnelPerson() {
   const email = currentUser?.email || '';
-  return DRIVER_EMAILS.includes(email.toLowerCase());
+  return FUNNEL_EMAILS.includes(email.toLowerCase());
 }
+
 function getStageIndex(status) {
   const idx = PIPELINE_STAGES.findIndex(s => s.key === status);
   return idx === -1 ? 0 : idx;
@@ -83,7 +85,6 @@ let allIdeas          = [];
 let currentDetailIdea = null;
 let ideasChannel      = null;
 let activeTab         = 'all';
-let currentUserDepartmentId = null;
 
 // ===================== FESTO EMAIL =====================
 /**
@@ -286,6 +287,99 @@ function emailSentToFunnel(idea, funnelLink, digiNote) {
   };
 }
 
+// ── NEW: email to Funnel person when Digi Driver sends idea to funnel ──────────
+function emailFunnelAssigned(idea, digiNote) {
+  return {
+    subject: `[IdeaFlow] ✉ New funnel review needed: ${idea.automation_name}`,
+    htmlBody: emailBase(`
+      <h2>✉ Funnel Review Required</h2>
+      <p>The Digi Community Driver has forwarded an automation idea for your Funnel review.</p>
+      <div class="idea-box">
+        <div class="label">Idea Name</div>
+        <div class="value">${escapeHtml(idea.automation_name)}</div>
+      </div>
+      <div class="idea-box">
+        <div class="label">Submitted by</div>
+        <div class="value">${escapeHtml(idea.idea_author)}</div>
+      </div>
+      ${idea.description ? `
+      <div class="idea-box">
+        <div class="label">Description</div>
+        <div class="value" style="font-size:13px;font-weight:400;line-height:1.6;">${escapeHtml(idea.description)}</div>
+      </div>` : ''}
+      ${digiNote ? `
+      <div class="idea-box">
+        <div class="label">Note from Digi Driver</div>
+        <div class="value" style="font-size:13px;font-weight:400;line-height:1.6;color:#f7c948;">${escapeHtml(digiNote)}</div>
+      </div>` : ''}
+      <p>Please log in to IdeaFlow and open the <strong>Funnel Queue</strong> tab to review this idea and make your decision.</p>
+    `),
+  };
+}
+
+// ── NEW: email to idea creator when sent to funnel ─────────────────────────────
+function emailCreatorSentToFunnel(idea, digiNote) {
+  return {
+    subject: `[IdeaFlow] ↗ Your idea is under Funnel review: ${idea.automation_name}`,
+    htmlBody: emailBase(`
+      <h2>↗ Your Idea Is Being Reviewed</h2>
+      <p>The Digi Community Driver has forwarded your automation idea for further Funnel review.</p>
+      <div class="idea-box">
+        <div class="label">Idea Name</div>
+        <div class="value">${escapeHtml(idea.automation_name)}</div>
+      </div>
+      ${digiNote ? `
+      <div class="idea-box">
+        <div class="label">Note from Digi Driver</div>
+        <div class="value" style="font-size:13px;font-weight:400;line-height:1.6;color:#f7c948;">${escapeHtml(digiNote)}</div>
+      </div>` : ''}
+      <p>The Funnel reviewer will assess your idea and you'll be notified once a decision has been made. You can track your idea's status in IdeaFlow at any time.</p>
+    `),
+  };
+}
+
+// ── NEW: email to creator after Funnel approves ────────────────────────────────
+function emailFunnelApproved(idea, funnelNote) {
+  return {
+    subject: `[IdeaFlow] ✓ Funnel approved — your idea is In Development: ${idea.automation_name}`,
+    htmlBody: emailBase(`
+      <h2>✓ Funnel Approved — In Development!</h2>
+      <p>Great news — the Funnel reviewer has approved your automation idea. It is now <strong>In Development</strong>.</p>
+      <div class="idea-box">
+        <div class="label">Idea Name</div>
+        <div class="value">${escapeHtml(idea.automation_name)}</div>
+      </div>
+      ${funnelNote ? `
+      <div class="idea-box">
+        <div class="label">Note from Funnel Reviewer</div>
+        <div class="value" style="font-size:13px;font-weight:400;line-height:1.6;">${escapeHtml(funnelNote)}</div>
+      </div>` : ''}
+      <p>The development team will be in touch. You can track the progress of your idea in IdeaFlow at any time.</p>
+    `),
+  };
+}
+
+// ── NEW: email to creator after Funnel rejects ─────────────────────────────────
+function emailFunnelRejected(idea, funnelNote) {
+  return {
+    subject: `[IdeaFlow] ✗ Funnel review outcome — ${idea.automation_name}`,
+    htmlBody: emailBase(`
+      <h2>✗ Funnel Review — Not Approved</h2>
+      <p>The Funnel reviewer has reviewed your automation idea and it was not approved for development at this time.</p>
+      <div class="idea-box">
+        <div class="label">Idea Name</div>
+        <div class="value">${escapeHtml(idea.automation_name)}</div>
+      </div>
+      ${funnelNote ? `
+      <div class="idea-box">
+        <div class="label">Note from Funnel Reviewer</div>
+        <div class="value" style="font-size:13px;font-weight:400;line-height:1.6;">${escapeHtml(funnelNote)}</div>
+      </div>` : ''}
+      <p>You can refine and resubmit your idea at any time through IdeaFlow.</p>
+    `),
+  };
+}
+
 function emailFunnelSubmitted(idea, answers) {
   return {
     subject: `[IdeaFlow] ↗ Funnel response received: ${idea.automation_name}`,
@@ -383,7 +477,7 @@ window.toggleTheme = function() {
 
 // ===================== UTILITY: SHOW/HIDE VIEWS =====================
 function showView(id) {
-  ['login-view','register-view','dashboard-view','detail-view'].forEach(v => {
+  ['login-view','register-view','dashboard-view','detail-view','funnel-view','funnel-detail-view'].forEach(v => {
     const el = document.getElementById(v);
     if (el) el.style.display = 'none';
   });
@@ -481,37 +575,23 @@ window.switchTab = function(tab) {
   renderIdeas();
 };
 
-async function showDashboard() {
+function showDashboard() {
+  // Funnel-only users go directly to the funnel view
+  if (isFunnelPerson() && !isDigiDriver()) {
+    showFunnelDashboard();
+    return;
+  }
+
   showView('dashboard-view');
   const email = currentUser?.email || currentUser?.user_metadata?.full_name || '';
   document.getElementById('user-display').textContent = email;
 
-  // Fetch current user's department ID from profiles table
-  if (currentUser) {
-    const { data: profile, error } = await supabaseClient
-      .from('profiles')
-      .select('department_id')
-      .eq('id', currentUser.id)
-      .single();
-    if (!error && profile) {
-      currentUserDepartmentId = profile.department_id;
-    } else {
-      currentUserDepartmentId = null;
-    }
-  }
-
-  // Show/hide Digi Driver tab based on role
   const digiTab = document.getElementById('digi-tab');
   if (digiTab) digiTab.style.display = isDigiDriver() ? '' : 'none';
 
-  // Show/hide Driver tab based on role
   const driverTab = document.getElementById('driver-tab');
-  if (driverTab) driverTab.style.display = isDriver() ? '' : 'none';
+  if (driverTab) driverTab.style.display = 'none';
 
-  const driverImportantTab = document.getElementById('driver-important-tab');
-  if (driverImportantTab) driverImportantTab.style.display = isDriver() ? '' : 'none';
-
-  // Reset to all-ideas tab
   activeTab = 'all';
   document.querySelectorAll('.nav-tab').forEach(el => {
     el.classList.toggle('active', el.dataset.tab === 'all');
@@ -522,40 +602,243 @@ async function showDashboard() {
   subscribeToRealtime();
 }
 
-// ===================== SUPABASE CRUD =====================
-async function fetchIdeasFromDB() {
-  if (!supabaseClient || !currentUser) return [];
-  
-  const { data: ideas, error } = await supabaseClient
+// ===================== FUNNEL DASHBOARD =====================
+async function showFunnelDashboard() {
+  showView('funnel-view');
+  const email = currentUser?.email || currentUser?.user_metadata?.full_name || '';
+  const el = document.getElementById('funnel-user-display');
+  if (el) el.textContent = email;
+  await fetchAndRenderFunnelQueue();
+  subscribeToRealtime();
+}
+
+async function fetchAndRenderFunnelQueue() {
+  if (!supabaseClient || !currentUser) return;
+  const { data, error } = await supabaseClient
     .from('automation_ideas')
     .select('*')
+    .in('status', ['Awaiting Funnel Response', 'Funnel Submitted'])
     .order('created_at', { ascending: false });
-  
+  if (error) { console.error('Funnel fetch error:', error); return; }
+  renderFunnelQueue(data || []);
+}
+
+function renderFunnelQueue(ideas) {
+  const grid = document.getElementById('funnel-queue-grid');
+  if (!grid) return;
+  if (ideas.length === 0) {
+    grid.innerHTML = `<div class="empty-state">✉ No ideas awaiting Funnel review right now.</div>`;
+    return;
+  }
+  grid.innerHTML = ideas.map(idea => {
+    const stage = getStageInfo(idea.status);
+    return `
+      <div class="idea-card" data-id="${idea.id}" onclick="showFunnelDetail('${idea.id}')">
+        <div class="card-header-row">
+          <div class="card-title">${escapeHtml(idea.automation_name || '—')}</div>
+          <span class="stage-badge ${stage.color}">${stage.icon} ${stage.label}</span>
+        </div>
+        <div class="card-author">${escapeHtml(idea.idea_author || 'Anonymous')}</div>
+        <div class="card-stats">
+          <div class="card-stat"><strong>${idea.weekly_hours != null ? idea.weekly_hours + 'h' : '—'}</strong> weekly hrs</div>
+          <div class="card-stat"><strong>${idea.standardized_process_score != null ? idea.standardized_process_score + '/10' : '—'}</strong> process std</div>
+        </div>
+        <div class="card-meta">
+          ${new Date(idea.created_at).toLocaleDateString()}
+          ${idea.digi_note ? ` • ⚑ Digi note attached` : ''}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+window.showFunnelDetail = async function(ideaId) {
+  let idea = allIdeas.find(i => i.id === ideaId);
+  if (!idea && supabaseClient) {
+    const { data } = await supabaseClient.from('automation_ideas').select('*').eq('id', ideaId).single();
+    idea = data;
+  }
+  if (!idea) return;
+  currentDetailIdea = idea;
+
+  // Load funnel response if available
+  let funnelResponse = null;
+  if (supabaseClient) {
+    const { data } = await supabaseClient
+      .from('funnel_responses')
+      .select('*')
+      .eq('idea_id', ideaId)
+      .order('created_at', { ascending: false })
+      .limit(1);
+    funnelResponse = data?.[0] || null;
+  }
+
+  renderFunnelDetail(idea, funnelResponse);
+  showView('funnel-detail-view');
+};
+
+function renderFunnelDetail(idea, funnelResponse) {
+  const container = document.getElementById('funnel-detail-body');
+  if (!container) return;
+  const stage = getStageInfo(idea.status);
+
+  container.innerHTML = `
+    <div class="detail-title">${escapeHtml(idea.automation_name || '—')}</div>
+    <div class="detail-author">Submitted by ${escapeHtml(idea.idea_author || 'Anonymous')}</div>
+    <div class="detail-badges">
+      <span class="stage-badge ${stage.color}">${stage.icon} ${idea.status}</span>
+      ${idea.ai_score != null ? `<span class="badge-ai-score ${aiScoreColor(idea.ai_score)}">${idea.ai_score}% AI Score</span>` : ''}
+    </div>
+
+    <div id="read-panel">
+      <div class="section-heading">§1 — Basic Info</div>
+      <div class="detail-section">
+        <div class="detail-label">Description</div>
+        <div class="detail-value">${escapeHtml(idea.description) || '—'}</div>
+      </div>
+      <hr class="divider" />
+      <div class="section-heading">§2 — Complexity</div>
+      <div class="score-grid">
+        <div class="score-box"><div class="score-box-label">Process Score</div><div class="score-box-value">${idea.standardized_process_score != null ? idea.standardized_process_score + '/10' : '—'}</div></div>
+        <div class="score-box"><div class="score-box-label">Digital Input</div><div class="score-box-value neutral">${idea.digital_input || '—'}</div></div>
+        <div class="score-box"><div class="score-box-label">Rule-Based</div><div class="score-box-value neutral">${idea.rule_based || '—'}</div></div>
+        <div class="score-box"><div class="score-box-label">Systems</div><div class="score-box-value neutral">${idea.software_systems || '—'}</div></div>
+      </div>
+      <hr class="divider" />
+      <div class="section-heading">§3 — Impact</div>
+      <div class="score-grid">
+        <div class="score-box"><div class="score-box-label">Weekly Hours</div><div class="score-box-value">${idea.weekly_hours != null ? idea.weekly_hours + 'h' : '—'}</div></div>
+        <div class="score-box"><div class="score-box-label">Speed Criticality</div><div class="score-box-value">${idea.speed_criticality != null ? idea.speed_criticality + '/10' : '—'}</div></div>
+      </div>
+      ${idea.digi_note ? `
+      <hr class="divider" />
+      <div class="detail-section">
+        <div class="detail-label" style="color:#f7c948;">⚑ Note from Digi Driver</div>
+        <div class="detail-value" style="color:#f7c948;">${escapeHtml(idea.digi_note)}</div>
+      </div>` : ''}
+
+      ${funnelResponse ? `
+      <hr class="divider" />
+      <div class="section-heading">§4 — Funnel Questionnaire Responses</div>
+      <div class="detail-section">
+        <div class="detail-label">Core Business Problem</div>
+        <div class="detail-value">${escapeHtml(funnelResponse.answer_problem) || '—'}</div>
+      </div>
+      <div class="detail-section" style="margin-top:14px;">
+        <div class="detail-label">Expected Outcome</div>
+        <div class="detail-value">${escapeHtml(funnelResponse.answer_outcome) || '—'}</div>
+      </div>
+      <div class="detail-section" style="margin-top:14px;">
+        <div class="detail-label">Priority / Urgency</div>
+        <div class="detail-value">${escapeHtml(funnelResponse.answer_priority) || '—'}</div>
+      </div>` : `
+      <hr class="divider" />
+      <div class="digi-waiting-notice">
+        <span class="digi-waiting-icon">✉</span>
+        <span>Waiting for the creator to complete the Sales Funnel questionnaire.</span>
+      </div>`}
+    </div>
+
+    <div class="pipeline-section">
+      <div class="section-heading">Funnel Decision</div>
+      ${idea.status === 'Funnel Submitted' ? `
+        <div class="digi-approval-box">
+          <div class="digi-approval-label">✉ Funnel Reviewer Decision</div>
+          <textarea id="funnel-note-input" placeholder="Optional note for the idea creator…" rows="2"></textarea>
+          <div class="digi-approval-actions">
+            <button class="btn-advance" onclick="funnelApprove('${idea.id}')">✓ Approve for Development</button>
+            <button class="btn-reject-stage" onclick="funnelReject('${idea.id}')">✗ Reject</button>
+          </div>
+        </div>` : `
+        <div class="digi-waiting-notice">
+          <span class="digi-waiting-icon">✉</span>
+          <span>Funnel questionnaire not yet submitted by the creator. Decision will be available once they respond.</span>
+        </div>`}
+    </div>
+  `;
+}
+
+// ===================== FUNNEL REVIEW ACTIONS =====================
+window.funnelApprove = async function(ideaId) {
+  const note = document.getElementById('funnel-note-input')?.value.trim() || null;
+  const btn  = document.querySelector('.digi-approval-actions .btn-advance');
+  if (btn) { btn.disabled = true; btn.textContent = 'Approving…'; }
+  try {
+    const idea = allIdeas.find(i => i.id === ideaId) || currentDetailIdea;
+    if (!idea) throw new Error('Idea not found');
+
+    const updates = {
+      status: 'In Development',
+      funnel_approved_by: currentUser.email,
+      ...(note ? { funnel_note: note } : {})
+    };
+    const { error } = await supabaseClient.from('automation_ideas').update(updates).eq('id', ideaId);
+    if (error) throw error;
+
+    // Email creator: approved
+    const submitterEmail = idea.submitter_email || null;
+    if (submitterEmail) {
+      const { subject, htmlBody } = emailFunnelApproved(idea, note);
+      sendFestoEmail({ subject, htmlBody, recipients: [submitterEmail] });
+    }
+
+    if (currentDetailIdea && currentDetailIdea.id === ideaId) {
+      currentDetailIdea = { ...currentDetailIdea, ...updates };
+    }
+    await fetchAndRenderFunnelQueue();
+    showFunnelDashboard();
+  } catch(err) {
+    console.error('Funnel approve error', err);
+    alert('Failed to approve: ' + (err.message || 'unknown'));
+    if (btn) { btn.disabled = false; btn.textContent = '✓ Approve for Development'; }
+  }
+};
+
+window.funnelReject = async function(ideaId) {
+  const note = document.getElementById('funnel-note-input')?.value.trim() || null;
+  const btn  = document.querySelector('.digi-approval-actions .btn-reject-stage');
+  if (btn) { btn.disabled = true; btn.textContent = 'Rejecting…'; }
+  try {
+    const idea = allIdeas.find(i => i.id === ideaId) || currentDetailIdea;
+    if (!idea) throw new Error('Idea not found');
+
+    const updates = {
+      status: 'Rejected',
+      funnel_approved_by: currentUser.email,
+      ...(note ? { funnel_note: note } : {})
+    };
+    const { error } = await supabaseClient.from('automation_ideas').update(updates).eq('id', ideaId);
+    if (error) throw error;
+
+    // Email creator: rejected
+    const submitterEmail = idea.submitter_email || null;
+    if (submitterEmail) {
+      const { subject, htmlBody } = emailFunnelRejected(idea, note);
+      sendFestoEmail({ subject, htmlBody, recipients: [submitterEmail] });
+    }
+
+    if (currentDetailIdea && currentDetailIdea.id === ideaId) {
+      currentDetailIdea = { ...currentDetailIdea, ...updates };
+    }
+    await fetchAndRenderFunnelQueue();
+    showFunnelDashboard();
+  } catch(err) {
+    console.error('Funnel reject error', err);
+    alert('Failed to reject: ' + (err.message || 'unknown'));
+    if (btn) { btn.disabled = false; btn.textContent = '✗ Reject'; }
+  }
+};
+
+window.showFunnelDashboardView = function() {
+  showFunnelDashboard();
+};
+
+
+async function fetchIdeasFromDB() {
+  if (!supabaseClient || !currentUser) return [];
+  const { data, error } = await supabaseClient
+    .from('automation_ideas').select('*').order('created_at', { ascending: false });
   if (error) { console.error("Fetch error:", error); return []; }
-  if (!ideas || ideas.length === 0) return [];
-  
-  const deptIds = [...new Set(ideas.map(i => i.department_id).filter(id => id))];
-  console.log("Department IDs to fetch:", deptIds); // <-- ADD THIS
-  
-  if (deptIds.length === 0) return ideas;
-  
-  const { data: departments, error: deptError } = await supabaseClient
-    .from('department')
-    .select('id, name')
-    .in('id', deptIds);
-  
-  if (deptError) { console.error("Department fetch error:", deptError); return ideas; }
-  console.log("Fetched departments:", departments); // <-- ADD THIS
-  
-  const deptMap = {};
-  departments.forEach(d => { deptMap[d.id] = d.name; });
-  
-  const ideasWithDept = ideas.map(idea => ({
-    ...idea,
-    departmentName: idea.department_id ? deptMap[idea.department_id] : null
-  }));
-  
-  return ideasWithDept;
+  return data || [];
 }
 
 async function fetchAndRenderIdeas() {
@@ -564,45 +847,20 @@ async function fetchAndRenderIdeas() {
   renderIdeas();
 }
 
-//HELPER METHOD FOR DEPARTMENT
-async function getCurrentUserDepartment() {
-  if (!currentUser) return null;
-  const { data, error } = await supabaseClient
-    .from('profiles')
-    .select('department_id')
-    .eq('id', currentUser.id)
-    .single();
-  if (error || !data) return null;
-  return data.department_id;
-}
 async function insertIdea(d) {
   if (!supabaseClient || !currentUser) throw new Error("Not authenticated");
-  
-  // Get the user's department
-  const deptId = await getCurrentUserDepartment();
-  
   const row = {
- idea_author: d.idea_author,
-    automation_name: d.automation_name,
-    description: d.description,
-    standardized_process_score: d.standardized_process_score,
-    digital_input: d.digital_input,
-    rule_based: d.rule_based,
-    software_systems: d.software_systems,
-    weekly_hours: d.weekly_hours,
-    speed_criticality: d.speed_criticality,
-    test_data_available: d.test_data_available,
-    process_documented: d.process_documented,
-    status: 'Submitted',
-    submitter_email: currentUser.email || null,   // from Lukas branch
-    department_id: deptId                         // from UNSTABLEdev branch
+    idea_author: d.idea_author, automation_name: d.automation_name, description: d.description,
+    standardized_process_score: d.standardized_process_score, digital_input: d.digital_input,
+    rule_based: d.rule_based, software_systems: d.software_systems, weekly_hours: d.weekly_hours,
+    speed_criticality: d.speed_criticality, test_data_available: d.test_data_available,
+    process_documented: d.process_documented, status: 'Submitted',
+    submitter_email: currentUser.email || null,
   };
   const { data, error } = await supabaseClient.from('automation_ideas').insert([row]).select();
   if (error) throw error;
   return data[0];
 }
-
-
 
 async function updateIdeaStatus(ideaId, newStatus) {
   if (!supabaseClient) throw new Error("No client");
@@ -658,9 +916,10 @@ function subscribeToRealtime() {
 
 // ===================== AI RATING ENGINE =====================
 function buildRatingPrompt(idea) {
-  return `Evaluate this automation idea and return a JSON object with EXACTLY these two fields:
+  return `Evaluate this automation idea and return a JSON object with EXACTLY these three fields:
 - "score": integer 0-100 representing overall automation viability
 - "summary": a 2-4 sentence paragraph covering your overall assessment, the strongest points, and the weakest points
+- "decision": either "Approved" or "Rejected" (use Approved if score >= ${AI_SCORE_THRESHOLD})
 
 Idea details:
 - Name: ${idea.automation_name}
@@ -705,66 +964,55 @@ async function rateIdeaWithAI(idea, { showLoading = false } = {}) {
 
   try {
     const result = await callAIAPI(idea);
-    const { score, summary } = result;
-    const safeScore = Math.max(0, Math.min(100, Math.round(score)));
+    const { score, summary, decision } = result;
 
-    let newStatus;
-    let aiDecision;
-    if (safeScore >= 95) {
-      newStatus = 'Awaiting Digi Approval';
-      aiDecision = 'Approved';
-    } else if (safeScore >= 50 && safeScore <= 94) {
-      newStatus = 'Driver Review';
-      aiDecision = 'Borderline';
-    } else {
-      newStatus = 'Rejected';
-      aiDecision = 'Rejected';
+    if (typeof score !== 'number' || !summary || !decision) {
+      throw new Error('Invalid AI response shape');
     }
 
-    // Update Supabase
+    const safeScore    = Math.max(0, Math.min(100, Math.round(score)));
+    const safeDecision = decision === 'Approved' ? 'Approved' : 'Rejected';
+    const newStatus    = safeDecision === 'Approved' ? 'Awaiting Digi Approval' : 'Rejected';
+
     await supabaseClient
       .from('automation_ideas')
       .update({
-        ai_score: safeScore,
-        ai_summary: summary,
-        ai_status: aiDecision,
-        status: newStatus,
-        stage_updated_at: new Date().toISOString()
+        ai_score: safeScore, ai_summary: summary, ai_status: safeDecision,
+        status: newStatus, stage_updated_at: new Date().toISOString(),
       })
       .eq('id', idea.id);
 
-    // Update in-memory copies
-    const idx = allIdeas.findIndex(i => i.id === idea.id);
-    if (idx !== -1) {
-      allIdeas[idx] = { ...allIdeas[idx], ai_score: safeScore, ai_summary: summary, ai_status: aiDecision, status: newStatus };
-    }
-    if (currentDetailIdea && currentDetailIdea.id === idea.id) {
-      currentDetailIdea = { ...currentDetailIdea, ai_score: safeScore, ai_summary: summary, ai_status: aiDecision, status: newStatus };
-    }
-
-    renderIdeas();
-    if (currentDetailIdea && currentDetailIdea.id === idea.id) renderDetail(currentDetailIdea);
-
-    // ── EMAIL NOTIFICATIONS ──────────────────────────────────────────────────
-    const updatedIdea = { ...idea, ai_score: safeScore, ai_summary: summary, ai_status: aiDecision, status: newStatus };
+    // ── EMAIL TRIGGER: AI review complete ────────────────────────────────────
+    const updatedIdea = { ...idea, ai_score: safeScore, ai_summary: summary, ai_status: safeDecision, status: newStatus };
     const submitterEmail = idea.submitter_email || null;
 
+    // 1. Notify submitter that AI review is done
     if (submitterEmail) {
-      const { subject, htmlBody } = emailAIReviewComplete(updatedIdea, safeScore, aiDecision);
+      const { subject, htmlBody } = emailAIReviewComplete(updatedIdea, safeScore, safeDecision);
       sendFestoEmail({ subject, htmlBody, recipients: [submitterEmail] });
     }
 
-    if (aiDecision === 'Approved') {
+    // 2. If approved → notify Digi Driver(s)
+    if (safeDecision === 'Approved') {
       const { subject, htmlBody } = emailAwaitingDigiApproval(updatedIdea, safeScore);
       sendFestoEmail({ subject, htmlBody, recipients: DIGI_DRIVER_EMAILS });
     }
 
-    if (aiDecision === 'Rejected' && submitterEmail) {
+    // 3. If rejected by AI → notify submitter with rejection email
+    if (safeDecision === 'Rejected' && submitterEmail) {
       const { subject, htmlBody } = emailRejected(updatedIdea, null, true);
       sendFestoEmail({ subject, htmlBody, recipients: [submitterEmail] });
     }
 
-    return { score: safeScore, summary, decision: aiDecision };
+    // Update in-memory copies
+    const idx = allIdeas.findIndex(i => i.id === idea.id);
+    if (idx !== -1) allIdeas[idx] = { ...allIdeas[idx], ...updatedIdea };
+    if (currentDetailIdea && currentDetailIdea.id === idea.id) currentDetailIdea = { ...currentDetailIdea, ...updatedIdea };
+
+    renderIdeas();
+    if (currentDetailIdea && currentDetailIdea.id === idea.id) renderDetail(currentDetailIdea);
+
+    return { score: safeScore, summary, decision: safeDecision };
   } catch(err) {
     console.error('[AI Rating] failed:', err);
     if (showLoading) setCardRatingState(idea.id, 'error');
@@ -821,17 +1069,10 @@ function renderIdeas() {
       i.status === 'Awaiting Funnel Response' ||
       i.status === 'Funnel Submitted'
     );
-  } else if (activeTab === 'driver') {
-    // Show only Driver Review ideas from the user's own department
+  } else if (activeTab === 'funnel') {
     filtered = filtered.filter(i =>
-      i.status === 'Driver Review' && i.department_id === currentUserDepartmentId
-    );
-  } else if (activeTab === 'driver-important') {
-    // Show only important (AI score >= 70) Driver Review ideas from own department
-    filtered = filtered.filter(i =>
-      i.status === 'Driver Review' &&
-      (i.ai_score || 0) >= 70 &&
-      i.department_id === currentUserDepartmentId
+      i.status === 'Awaiting Funnel Response' ||
+      i.status === 'Funnel Submitted'
     );
   }
 
@@ -845,16 +1086,13 @@ function renderIdeas() {
   }
 
   if (filtered.length === 0) {
-    let msg = '✨ No ideas found. Create one!';
-    if (activeTab === 'approved') {
-      msg = '⚙ No ideas currently in development or implemented yet.';
-    } else if (activeTab === 'digi') {
-      msg = '⚑ No ideas awaiting your approval right now.';
-    } else if (activeTab === 'driver') {
-      msg = '🎯 No ideas awaiting driver review in your department.';
-    } else if (activeTab === 'driver-important') {
-      msg = '❗ No important ideas awaiting driver review in your department.';
-    }
+    const msg = activeTab === 'approved'
+      ? '⚙ No ideas currently in development or implemented yet.'
+      : activeTab === 'digi'
+      ? '⚑ No ideas awaiting your approval right now.'
+      : activeTab === 'funnel'
+      ? '✉ No ideas in the Funnel Queue right now.'
+      : '✨ No ideas found. Create one!';
     grid.innerHTML = `<div class="empty-state">${msg}</div>`;
     return;
   }
@@ -865,20 +1103,13 @@ function renderIdeas() {
       ? `<div class="ai-score-badge ${aiScoreColor(idea.ai_score)}">${idea.ai_score}%</div>`
       : `<div class="ai-score-badge ai-pending">Not rated</div>`;
     const stage = getStageInfo(idea.status);
-
-    // Build author + department string
-    let authorDisplay = escapeHtml(idea.idea_author || 'Anonymous');
-    if (idea.departmentName) {
-      authorDisplay += `, Department: ${escapeHtml(idea.departmentName)}`;
-    }
-
     return `
       <div class="idea-card" data-id="${idea.id}" onclick="showDetailById('${idea.id}')">
         <div class="card-header-row">
           <div class="card-title">${escapeHtml(idea.automation_name || '—')}</div>
           ${scoreBadge}
         </div>
-        <div class="card-author">${authorDisplay}</div>
+        <div class="card-author">${escapeHtml(idea.idea_author || 'Anonymous')}</div>
         <div class="card-stats">
           <div class="card-stat"><strong>${idea.weekly_hours != null ? idea.weekly_hours + 'h' : '—'}</strong> weekly hrs</div>
           <div class="card-stat"><strong>${idea.standardized_process_score != null ? idea.standardized_process_score + '/10' : '—'}</strong> process std</div>
@@ -955,16 +1186,12 @@ function renderDetail(idea) {
 
   container.innerHTML = `
     <div class="detail-title" id="d-title">${escapeHtml(idea.automation_name || '—')}</div>
-    <div class="detail-author" id="d-author-disp">
-  Submitted by ${escapeHtml(idea.idea_author || 'Anonymous')}
-  ${idea.department?.name ? `<span class="detail-dept"> (${escapeHtml(idea.department.name)})</span>` : ''}
-</div>
+    <div class="detail-author" id="d-author-disp">Submitted by ${escapeHtml(idea.idea_author || 'Anonymous')}</div>
     <div class="detail-badges">
       <span class="stage-badge ${getStageInfo(idea.status).color}" id="d-badge">${getStageInfo(idea.status).icon} ${idea.status}</span>
       ${idea.ai_score != null ? `<span class="badge-ai-score ${aiScoreColor(idea.ai_score)}">${idea.ai_score}% AI Score</span>` : ''}
     </div>
 
-    <!-- EDIT PANEL -->
     <div class="detail-edit-panel" id="edit-panel">
       <div class="section-heading">Edit Idea</div>
       <div class="edit-grid">
@@ -1016,7 +1243,6 @@ function renderDetail(idea) {
       </div>
     </div>
 
-    <!-- READ VIEW -->
     <div id="read-panel">
       <div class="section-heading">§1 — Basic Info</div>
       <div class="detail-section">
@@ -1051,7 +1277,6 @@ function renderDetail(idea) {
       ${aiSection}
     </div>
 
-    <!-- PIPELINE STEPPER -->
     <div class="pipeline-section">
       <div class="section-heading">§6 — Pipeline Stage</div>
       <div class="pipeline-stepper">
@@ -1070,31 +1295,10 @@ function renderDetail(idea) {
           `;
         }).join('')}
       </div>
-
       ${idea.status === 'Rejected' ? `
         <div class="pipeline-rejected-note">✗ This idea was rejected${idea.ai_status === 'Rejected' ? ' by AI scoring' : ''}.
           ${idea.digi_note ? `<span class="digi-note-inline">Digi note: "${escapeHtml(idea.digi_note)}"</span>` : ''}
-          ${idea.driver_note ? `<span class="driver-note-inline">Driver note: "${escapeHtml(idea.driver_note)}"</span>` : ''}
         </div>
-      ` : ''}
-
-      <!-- DRIVER REVIEW BOX (separate condition) -->
-      ${idea.status === 'Driver Review' ? `
-        ${isDriver() ? `
-          <div class="driver-review-box">
-            <div class="driver-review-label">🎯 Driver Review</div>
-            <textarea id="driver-note-input" placeholder="Optional note for the submitter…" rows="2"></textarea>
-            <div class="driver-review-actions">
-              <button class="btn-advance" onclick="driverApprove('${idea.id}')">✓ Approve (send to Digi Queue)</button>
-              <button class="btn-reject-stage" onclick="driverReject('${idea.id}')">✗ Reject</button>
-            </div>
-          </div>
-        ` : `
-          <div class="digi-waiting-notice" style="color:#ffc107;">
-            <span class="digi-waiting-icon">🎯</span>
-            <span>This idea is awaiting review by a Driver.</span>
-          </div>
-        `}
       ` : ''}
 
       ${idea.status === 'Funnel Submitted' ? `
@@ -1122,7 +1326,6 @@ function renderDetail(idea) {
             <button class="btn-reject-stage" onclick="digiReject('${idea.id}')">✗ Reject</button>
           </div>` : ''}
       ` : idea.status === 'Awaiting Digi Approval' ? `
-        <!-- DIGI APPROVAL BOX (only for digi drivers when status is Awaiting Digi Approval) -->
         ${isDigiDriver() ? `
           <div class="digi-approval-box">
             <div class="digi-approval-label">⚑ Digi Driver Decision</div>
@@ -1139,10 +1342,7 @@ function renderDetail(idea) {
             <span>Awaiting approval from the Digi Community Driver.</span>
           </div>
         `}
-      ` : ''}
-
-      <!-- PIPELINE ACTION BUTTONS (hide for statuses that have their own action boxes) -->
-      ${idea.status !== 'Driver Review' && idea.status !== 'Awaiting Digi Approval' && idea.status !== 'Awaiting Funnel Response' && idea.status !== 'Funnel Submitted' ? `
+      ` : `
         <div class="pipeline-actions">
           ${(() => {
             const next = getNextStage(idea.status);
@@ -1160,13 +1360,10 @@ function renderDetail(idea) {
             <button class="btn-advance" onclick="changeStatus('${idea.id}', 'Submitted')">↩ Reopen</button>
           ` : ''}
         </div>
-      ` : ''}
+      `}
 
       ${idea.digi_note && idea.status !== 'Rejected' ? `
         <div class="digi-note-display">⚑ Digi note: "${escapeHtml(idea.digi_note)}"</div>
-      ` : ''}
-      ${idea.driver_note && idea.status !== 'Rejected' ? `
-        <div class="driver-note-display">🎯 Driver note: "${escapeHtml(idea.driver_note)}"</div>
       ` : ''}
     </div>
 
@@ -1175,6 +1372,7 @@ function renderDetail(idea) {
     </div>
   `;
 }
+
 let _editMode = false;
 
 window.toggleEditMode = function() {
@@ -1302,27 +1500,13 @@ window.digiReject = async function(ideaId) {
 
 window.digiSendToFunnel = async function(ideaId) {
   const note = document.getElementById('digi-note-input')?.value.trim() || null;
-  const btn = document.querySelector('.digi-approval-actions .btn-funnel');
+  const btn  = document.querySelector('.digi-approval-actions .btn-funnel');
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Sending…'; }
-
   try {
-    // 1. Look up the idea
     const idea = allIdeas.find(i => i.id === ideaId) || currentDetailIdea;
     if (!idea) throw new Error('Idea not found');
 
-    // 2. Call the Edge Function via Supabase client
-    const { data: fnData, error: fnError } = await supabaseClient.functions.invoke('smart-action', {
-      body: {
-        idea_id:    ideaId,
-        digi_note:  note,
-        digi_email: currentUser.email
-      }
-    });
-
-    if (fnError) throw new Error(fnError.message || 'Edge Function error');
-
-    // 3. Update status to "Awaiting Funnel Response"
-    const updates = {
+    const updates= {
       status: 'Awaiting Funnel Response',
       digi_approved_by: currentUser.email,
       ...(note ? { digi_note: note } : {})
@@ -1330,18 +1514,25 @@ window.digiSendToFunnel = async function(ideaId) {
     const { error } = await supabaseClient.from('automation_ideas').update(updates).eq('id', ideaId);
     if (error) throw error;
 
-    //const fnData = {}; galimai reiks removint
+    const fnData = {};
 
     if (currentDetailIdea && currentDetailIdea.id === ideaId) {
       currentDetailIdea = { ...currentDetailIdea, ...updates };
     }
 
-    // ── EMAIL TRIGGER: funnel email to submitter ──────────────────────────
-    // fnData may contain the funnel link generated by the Edge Function
+    // ── EMAIL TRIGGER: notify funnel person + idea creator ────────────────
     const funnelLink = null;
     const submitterEmail = idea.submitter_email || null;
+
+    // 1. Notify the funnel reviewer(s)
+    if (FUNNEL_EMAILS.length > 0) {
+      const { subject, htmlBody } = emailFunnelAssigned(idea, note);
+      sendFestoEmail({ subject, htmlBody, recipients: FUNNEL_EMAILS });
+    }
+
+    // 2. Notify the idea creator that their idea is going to funnel review
     if (submitterEmail) {
-      const { subject, htmlBody } = emailSentToFunnel(idea, funnelLink, note);
+      const { subject, htmlBody } = emailCreatorSentToFunnel(idea, note);
       sendFestoEmail({ subject, htmlBody, recipients: [submitterEmail] });
     }
 
@@ -1360,85 +1551,6 @@ window.digiSendToFunnel = async function(ideaId) {
     console.error('Send to funnel error', err);
     alert('Failed to send funnel request: ' + (err.message || 'unknown'));
     if (btn) { btn.disabled = false; btn.textContent = '↗ Send to Sales Funnel'; }
-  }
-};
-
-
-
-
-// ===================== DRIVER ACTIONS =====================
-window.driverApprove = async function(ideaId) {
-  const { data: idea, error: fetchError } = await supabaseClient
-    .from('automation_ideas')
-    .select('status')
-    .eq('id', ideaId)
-    .single();
-  
-  if (fetchError || !idea) {
-    alert('Could not verify idea status.');
-    return;
-  }
-  
-  if (idea.status !== 'Driver Review') {
-    alert(`Cannot approve: idea is in "${idea.status}" stage, not "Driver Review".`);
-    return;
-  }
-  
-  const note = document.getElementById('driver-note-input')?.value.trim() || null;
-  const btn = document.querySelector('.driver-review-actions .btn-advance');
-  if (btn) { btn.disabled = true; btn.textContent = 'Approving…'; }
-  try {
-    const updates = { status: 'Awaiting Digi Approval', driver_note: note, stage_updated_at: new Date().toISOString() };
-    const { error } = await supabaseClient.from('automation_ideas').update(updates).eq('id', ideaId);
-    if (error) throw error;
-    if (currentDetailIdea && currentDetailIdea.id === ideaId) {
-      currentDetailIdea = { ...currentDetailIdea, ...updates };
-    }
-    await fetchAndRenderIdeas();
-    if (currentDetailIdea && currentDetailIdea.id === ideaId) renderDetail(currentDetailIdea);
-  } catch(err) {
-    console.error('Driver approve error', err);
-    alert('Failed to approve: ' + (err.message || 'unknown'));
-    if (btn) btn.disabled = false;
-  }
-};
-
-
-
-
-window.driverReject = async function(ideaId) {
-  const { data: idea, error: fetchError } = await supabaseClient
-    .from('automation_ideas')
-    .select('status')
-    .eq('id', ideaId)
-    .single();
-  
-  if (fetchError || !idea) {
-    alert('Could not verify idea status.');
-    return;
-  }
-  
-  if (idea.status !== 'Driver Review') {
-    alert(`Cannot reject: idea is in "${idea.status}" stage, not "Driver Review".`);
-    return;
-  }
-  
-  const note = document.getElementById('driver-note-input')?.value.trim() || null;
-  const btn = document.querySelector('.driver-review-actions .btn-reject-stage');
-  if (btn) { btn.disabled = true; btn.textContent = 'Rejecting…'; }
-  try {
-    const updates = { status: 'Rejected', driver_note: note, stage_updated_at: new Date().toISOString() };
-    const { error } = await supabaseClient.from('automation_ideas').update(updates).eq('id', ideaId);
-    if (error) throw error;
-    if (currentDetailIdea && currentDetailIdea.id === ideaId) {
-      currentDetailIdea = { ...currentDetailIdea, ...updates };
-    }
-    await fetchAndRenderIdeas();
-    if (currentDetailIdea && currentDetailIdea.id === ideaId) renderDetail(currentDetailIdea);
-  } catch(err) {
-    console.error('Driver reject error', err);
-    alert('Failed to reject: ' + (err.message || 'unknown'));
-    if (btn) btn.disabled = false;
   }
 };
 
@@ -1568,3 +1680,6 @@ window.switchTab        = switchTab;
 window.digiApprove      = digiApprove;
 window.digiReject       = digiReject;
 window.digiSendToFunnel = digiSendToFunnel;
+window.funnelApprove    = funnelApprove;
+window.funnelReject     = funnelReject;
+window.showFunnelDetail = showFunnelDetail;
