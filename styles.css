@@ -1229,4 +1229,59 @@ body.theme-light .btn-advance { color: #fff; }
   font-style: italic;
   color: var(--muted);
 }
-
+/* ── STATISTICS VIEW ────────────────────────────────── */
+.stats-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 36px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: rgba(12,12,15,.92);
+  backdrop-filter: blur(12px);
+  z-index: 100;
+}
+.stats-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 36px;
+}
+.stats-cards {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 48px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 28px 36px;
+  text-align: center;
+  min-width: 200px;
+  flex: 1;
+}
+.stat-number {
+  font-family: 'Syne', sans-serif;
+  font-size: 48px;
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: -1px;
+  line-height: 1;
+  margin-bottom: 12px;
+}
+.stat-label {
+  font-size: 12px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.chart-container {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+  margin-top: 20px;
+}

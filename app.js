@@ -383,7 +383,7 @@ window.toggleTheme = function() {
 
 // ===================== UTILITY: SHOW/HIDE VIEWS =====================
 function showView(id) {
-  ['login-view','register-view','dashboard-view','detail-view'].forEach(v => {
+  ['login-view','register-view','dashboard-view','detail-view','stats-view'].forEach(v => {
     const el = document.getElementById(v);
     if (el) el.style.display = 'none';
   });
@@ -649,6 +649,10 @@ function subscribeToRealtime() {
       if (currentDetailIdea && payload.new && currentDetailIdea.id === payload.new.id) {
         currentDetailIdea = payload.new;
         renderDetail(currentDetailIdea);
+      }
+      // Refresh statistics view if it is visible (safe check)
+      if (typeof refreshStatsIfVisible === 'function') {
+        refreshStatsIfVisible();
       }
     })
     .subscribe((status) => {
