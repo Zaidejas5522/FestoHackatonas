@@ -205,8 +205,8 @@ function showDashboard() {
   const driverTab = document.getElementById('driver-tab');
   if (driverTab) driverTab.style.display = isDriver() ? '' : 'none';
 
-  const driverNewTab = document.getElementById('driver-new-tab');
-  if (driverNewTab) driverNewTab.style.display = isDriver() ? '' : 'none';
+  const driverImportantTab = document.getElementById('driver-important-tab');
+  if (driverImportantTab) driverImportantTab.style.display = isDriver() ? '' : 'none';
 
   // Reset to all-ideas tab
   activeTab = 'all';
@@ -452,6 +452,9 @@ function renderIdeas() {
   } else if (activeTab === 'driver') {
     filtered = filtered.filter(i => i.status === 'Driver Review');
   }
+   else if (activeTab === 'driver-important') {
+  filtered = filtered.filter(i => i.status === 'Driver Review' && (i.ai_score || 0) >= 70);
+}
 
   if (statusFilter !== 'All') filtered = filtered.filter(i => i.status === statusFilter);
   if (searchTerm.trim()) {
@@ -470,6 +473,9 @@ function renderIdeas() {
       msg = '⚑ No ideas awaiting your approval right now.';
     } else if (activeTab === 'driver') {
       msg = '🎯 No ideas awaiting driver review.';
+    }
+    else if( activeTab === 'driver-important') {
+      msg = '❗ No important ideas awaiting driver review.';
     }
     grid.innerHTML = `<div class="empty-state">${msg}</div>`;
     return;
