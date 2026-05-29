@@ -236,10 +236,37 @@ async function showDashboard() {
 // ===================== SUPABASE CRUD =====================
 async function fetchIdeasFromDB() {
   if (!supabaseClient || !currentUser) return [];
-  const { data, error } = await supabaseClient
-    .from('automation_ideas').select('*').order('created_at', { ascending: false });
+  
+  const { data: ideas, error } = await supabaseClient
+    .from('automation_ideas')
+    .select('*')
+    .order('created_at', { ascending: false });
+  
   if (error) { console.error("Fetch error:", error); return []; }
-  return data || [];
+  if (!ideas || ideas.length === 0) return [];
+  
+  const deptIds = [...new Set(ideas.map(i => i.department_id).filter(id => id))];
+  console.log("Department IDs to fetch:", deptIds); // <-- ADD THIS
+  
+  if (deptIds.length === 0) return ideas;
+  
+  const { data: departments, error: deptError } = await supabaseClient
+    .from('department')
+    .select('id, name')
+    .in('id', deptIds);
+  
+  if (deptError) { console.error("Department fetch error:", deptError); return ideas; }
+  console.log("Fetched departments:", departments); // <-- ADD THIS
+  
+  const deptMap = {};
+  departments.forEach(d => { deptMap[d.id] = d.name; });
+  
+  const ideasWithDept = ideas.map(idea => ({
+    ...idea,
+    departmentName: idea.department_id ? deptMap[idea.department_id] : null
+  }));
+  
+  return ideasWithDept;
 }
 
 async function fetchAndRenderIdeas() {
@@ -249,6 +276,16 @@ async function fetchAndRenderIdeas() {
 }
 
 //HELPER METHOD FOR DEPARTMENT
+async function getCurrentUserDepartment() {
+  if (!currentUser) return null;
+  const { data, error } = await supabaseClient
+    .from('profiles')
+    .select('department_id')
+    .eq('id', currentUser.id)
+    .single();
+  if (error || !data) return null;
+  return data.department_id;
+}
 async function insertIdea(d) {
   if (!supabaseClient || !currentUser) throw new Error("Not authenticated");
   
@@ -275,19 +312,7 @@ async function insertIdea(d) {
   return data[0];
 }
 
-async function insertIdea(d) {
-  if (!supabaseClient || !currentUser) throw new Error("Not authenticated");
-  const row = {
-    idea_author: d.idea_author, automation_name: d.automation_name, description: d.description,
-    standardized_process_score: d.standardized_process_score, digital_input: d.digital_input,
-    rule_based: d.rule_based, software_systems: d.software_systems, weekly_hours: d.weekly_hours,
-    speed_criticality: d.speed_criticality, test_data_available: d.test_data_available,
-    process_documented: d.process_documented, status: 'Submitted'
-  };
-  const { data, error } = await supabaseClient.from('automation_ideas').insert([row]).select();
-  if (error) throw error;
-  return data[0];
-}
+
 
 async function updateIdeaStatus(ideaId, newStatus) {
   if (!supabaseClient) throw new Error("No client");
@@ -535,13 +560,19 @@ function renderIdeas() {
       : `<div class="ai-score-badge ai-pending">Not rated</div>`;
     const stage = getStageInfo(idea.status);
 
+    // Build author + department string
+    let authorDisplay = escapeHtml(idea.idea_author || 'Anonymous');
+    if (idea.departmentName) {
+      authorDisplay += `, Department: ${escapeHtml(idea.departmentName)}`;
+    }
+
     return `
       <div class="idea-card" data-id="${idea.id}" onclick="showDetailById('${idea.id}')">
         <div class="card-header-row">
           <div class="card-title">${escapeHtml(idea.automation_name || '—')}</div>
           ${scoreBadge}
         </div>
-        <div class="card-author">${escapeHtml(idea.idea_author || 'Anonymous')}</div>
+        <div class="card-author">${authorDisplay}</div>
         <div class="card-stats">
           <div class="card-stat">
             <strong>${idea.weekly_hours != null ? idea.weekly_hours + 'h' : '—'}</strong>
@@ -628,7 +659,10 @@ function renderDetail(idea) {
 
   container.innerHTML = `
     <div class="detail-title" id="d-title">${escapeHtml(idea.automation_name || '—')}</div>
-    <div class="detail-author" id="d-author-disp">Submitted by ${escapeHtml(idea.idea_author || 'Anonymous')}</div>
+    <div class="detail-author" id="d-author-disp">
+  Submitted by ${escapeHtml(idea.idea_author || 'Anonymous')}
+  ${idea.department?.name ? `<span class="detail-dept"> (${escapeHtml(idea.department.name)})</span>` : ''}
+</div>
     <div class="detail-badges">
       <span class="stage-badge ${getStageInfo(idea.status).color}" id="d-badge">${getStageInfo(idea.status).icon} ${idea.status}</span>
       ${idea.ai_score != null ? `<span class="badge-ai-score ${aiScoreColor(idea.ai_score)}">${idea.ai_score}% AI Score</span>` : ''}
