@@ -719,10 +719,12 @@ async function rateIdeaWithAI(idea, { showLoading = false } = {}) {
 
     let newStatus;
     let aiDecision; // for display
-    if (safeScore >= 95 || (idea.weekly_hours >= 200 && safeScore >= 70)  ) {
+
+    // New thresholds:
+    if (safeScore >= 90) {
       newStatus = 'Awaiting Digi Approval';
       aiDecision = 'Approved';
-    } else if (safeScore >= 50 && safeScore <= 94) {
+    } else if (safeScore >= 40) {
       newStatus = 'Driver Review';
       aiDecision = 'Borderline';
     } else {
