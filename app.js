@@ -83,6 +83,7 @@ let allIdeas          = [];
 let currentDetailIdea = null;
 let ideasChannel      = null;
 let activeTab         = 'all';
+let currentUserDepartmentId = null;
 
 // ===================== FESTO EMAIL =====================
 /**
@@ -704,7 +705,7 @@ async function rateIdeaWithAI(idea, { showLoading = false } = {}) {
 
   try {
     const result = await callAIAPI(idea);
-        const { score, summary } = result;
+    const { score, summary } = result;
     const safeScore = Math.max(0, Math.min(100, Math.round(score)));
 
     let newStatus;
@@ -720,6 +721,7 @@ async function rateIdeaWithAI(idea, { showLoading = false } = {}) {
       aiDecision = 'Rejected';
     }
 
+    // Update Supabase
     await supabaseClient
       .from('automation_ideas')
       .update({
@@ -731,6 +733,7 @@ async function rateIdeaWithAI(idea, { showLoading = false } = {}) {
       })
       .eq('id', idea.id);
 
+    // Update in-memory copies
     const idx = allIdeas.findIndex(i => i.id === idea.id);
     if (idx !== -1) {
       allIdeas[idx] = { ...allIdeas[idx], ai_score: safeScore, ai_summary: summary, ai_status: aiDecision, status: newStatus };
@@ -742,7 +745,7 @@ async function rateIdeaWithAI(idea, { showLoading = false } = {}) {
     renderIdeas();
     if (currentDetailIdea && currentDetailIdea.id === idea.id) renderDetail(currentDetailIdea);
 
-    // ── EMAIL NOTIFICATIONS (keep from Lukas branch) ──────────────────────────
+    // ── EMAIL NOTIFICATIONS ──────────────────────────────────────────────────
     const updatedIdea = { ...idea, ai_score: safeScore, ai_summary: summary, ai_status: aiDecision, status: newStatus };
     const submitterEmail = idea.submitter_email || null;
 
@@ -761,16 +764,6 @@ async function rateIdeaWithAI(idea, { showLoading = false } = {}) {
       sendFestoEmail({ subject, htmlBody, recipients: [submitterEmail] });
     }
 
-    return { score: safeScore, summary, decision: aiDecision };
-    }
-
-    // Update in-memory copies
-    const idx = allIdeas.findIndex(i => i.id === idea.id);
-    if (idx !== -1) allIdeas[idx] = { ...allIdeas[idx], ...updatedIdea };
-    if (currentDetailIdea && currentDetailIdea.id === idea.id) currentDetailIdea = { ...currentDetailIdea, ...updatedIdea };
-
-    renderIdeas();
-    if (currentDetailIdea && currentDetailIdea.id === idea.id) renderDetail(currentDetailIdea);
     return { score: safeScore, summary, decision: aiDecision };
   } catch(err) {
     console.error('[AI Rating] failed:', err);
@@ -1337,7 +1330,7 @@ window.digiSendToFunnel = async function(ideaId) {
     const { error } = await supabaseClient.from('automation_ideas').update(updates).eq('id', ideaId);
     if (error) throw error;
 
-    const fnData = {};
+    //const fnData = {}; galimai reiks removint
 
     if (currentDetailIdea && currentDetailIdea.id === ideaId) {
       currentDetailIdea = { ...currentDetailIdea, ...updates };
