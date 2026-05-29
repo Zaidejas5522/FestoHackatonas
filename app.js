@@ -15,6 +15,7 @@ const AI_SCORE_THRESHOLD = 60;
 const PIPELINE_STAGES = [
   { key: 'Submitted',              label: 'Submitted',          icon: '✦', color: 'stage-submitted'   },
   { key: 'AI Review',              label: 'AI Review',          icon: '⟳', color: 'stage-review'      },
+  { key: 'Driver Review',          label: 'Driver Review',      icon: '🎯', color: 'stage-driver'     }, 
   { key: 'Awaiting Digi Approval', label: 'Digi Approval',      icon: '⚑', color: 'stage-digi'        },
   { key: 'Awaiting Funnel Response',label: 'Funnel Response',    icon: '✉', color: 'stage-funnel'      },
   { key: 'Funnel Submitted',        label: 'Funnel Submitted',   icon: '↗', color: 'stage-funnel-done' },
@@ -30,12 +31,20 @@ const DIGI_DRIVER_EMAILS = [
   'digidriver@festo.com',   // ← replace with the real Digi Driver email
   // 'another@festo.com',   // add more if needed
 ];
+// ===================== DRIVER ROLE =====================
+const DRIVER_EMAILS = [
+  'driver@festo.com',   // ← replace with the real Digi Driver email
+  // 'another@festo.com',   // add more if needed
+];
 
 function isDigiDriver() {
   const email = currentUser?.email || '';
   return DIGI_DRIVER_EMAILS.includes(email.toLowerCase());
 }
-
+function isDriver() {
+  const email = currentUser?.email || '';
+  return DRIVER_EMAILS.includes(email.toLowerCase());
+}
 function getStageIndex(status) {
   const idx = PIPELINE_STAGES.findIndex(s => s.key === status);
   return idx === -1 ? 0 : idx;
@@ -192,6 +201,10 @@ function showDashboard() {
   const digiTab = document.getElementById('digi-tab');
   if (digiTab) digiTab.style.display = isDigiDriver() ? '' : 'none';
 
+  // Show/hide  Driver tab based on role
+  const driverTab = document.getElementById('driver-tab');
+  if (driverTab) driverTab.style.display = isDriver() ? '' : 'none';
+
   // Reset to all-ideas tab
   activeTab = 'all';
   document.querySelectorAll('.nav-tab').forEach(el => {
@@ -275,10 +288,9 @@ function subscribeToRealtime() {
 // ===================== AI RATING ENGINE =====================
 
 function buildRatingPrompt(idea) {
-  return `Evaluate this automation idea and return a JSON object with EXACTLY these three fields:
+  return `Evaluate this automation idea and return a JSON object with EXACTLY these two fields:
 - "score": integer 0-100 representing overall automation viability
 - "summary": a 2-4 sentence paragraph covering your overall assessment, the strongest points, and the weakest points
-- "decision": either "Approved" or "Rejected" (use Approved if score >= ${AI_SCORE_THRESHOLD})
 
 Idea details:
 - Name: ${idea.automation_name}
@@ -324,60 +336,51 @@ async function callAIAPI(idea) {
 }
 
 async function rateIdeaWithAI(idea, { showLoading = false } = {}) {
-  // Show loading state on the card if requested
   if (showLoading) setCardRatingState(idea.id, 'loading');
 
   try {
     const result = await callAIAPI(idea);
-    const { score, summary, decision } = result;
+    const { score, summary } = result;   // AI no longer returns decision
+    const safeScore = Math.max(0, Math.min(100, Math.round(score)));
 
-    // Validate
-    if (typeof score !== 'number' || !summary || !decision) {
-      throw new Error('Invalid AI response shape');
+    // Determine status based on score range
+    let newStatus;
+    let aiDecision; // for display
+    if (safeScore >= 66) {
+      newStatus = 'Awaiting Digi Approval';
+      aiDecision = 'Approved';
+    } else if (safeScore >= 50 && safeScore <= 65) {
+      newStatus = 'Driver Review';
+      aiDecision = 'Borderline';
+    } else {
+      newStatus = 'Rejected';
+      aiDecision = 'Rejected';
     }
 
-    const safeScore    = Math.max(0, Math.min(100, Math.round(score)));
-    const safeDecision = decision === 'Approved' ? 'Approved' : 'Rejected';
-    // AI passes → goes to Digi Driver queue; AI rejects → Rejected
-    const newStatus = safeDecision === 'Approved' ? 'Awaiting Digi Approval' : 'Rejected';
-
-    // Write back to Supabase — update ai fields AND status
+    // Update Supabase
     await supabaseClient
       .from('automation_ideas')
       .update({ 
         ai_score: safeScore, 
         ai_summary: summary, 
-        ai_status: safeDecision, 
+        ai_status: aiDecision, 
         status: newStatus,
         stage_updated_at: new Date().toISOString()
       })
       .eq('id', idea.id);
 
-    // Update in-memory copy
+    // Update in-memory copies
     const idx = allIdeas.findIndex(i => i.id === idea.id);
     if (idx !== -1) {
-      allIdeas[idx] = { 
-        ...allIdeas[idx], 
-        ai_score: safeScore, 
-        ai_summary: summary, 
-        ai_status: safeDecision, 
-        status: newStatus
-      };
+      allIdeas[idx] = { ...allIdeas[idx], ai_score: safeScore, ai_summary: summary, ai_status: aiDecision, status: newStatus };
     }
     if (currentDetailIdea && currentDetailIdea.id === idea.id) {
-      currentDetailIdea = { 
-        ...currentDetailIdea, 
-        ai_score: safeScore, 
-        ai_summary: summary, 
-        ai_status: safeDecision, 
-        status: newStatus
-      };
+      currentDetailIdea = { ...currentDetailIdea, ai_score: safeScore, ai_summary: summary, ai_status: aiDecision, status: newStatus };
     }
 
     renderIdeas();
     if (currentDetailIdea && currentDetailIdea.id === idea.id) renderDetail(currentDetailIdea);
-
-    return { score: safeScore, summary, decision: safeDecision };
+    return { score: safeScore, summary, decision: aiDecision };
   } catch(err) {
     console.error('[AI Rating] failed:', err);
     if (showLoading) setCardRatingState(idea.id, 'error');
@@ -714,6 +717,7 @@ function renderDetail(idea) {
       ${idea.status === 'Rejected' ? `
         <div class="pipeline-rejected-note">✗ This idea was rejected${idea.ai_status === 'Rejected' ? ' by AI scoring' : ''}.
           ${idea.digi_note ? `<span class="digi-note-inline">Digi note: "${escapeHtml(idea.digi_note)}"</span>` : ''}
+          ${idea.driver_note ? `<span class="driver-note-inline">Driver note: "${escapeHtml(idea.driver_note)}"</span>` : ''}
         </div>
       ` : ''}
 
@@ -742,6 +746,20 @@ function renderDetail(idea) {
             <button class="btn-reject-stage" onclick="digiReject('${idea.id}')">✗ Reject</button>
           </div>` : ''}
       ` : idea.status === 'Awaiting Digi Approval' ? `
+      <!-- DRIVER REVIEW BOX (only for drivers when status is Driver Review) -->
+      ${idea.status === 'Driver Review' && isDriver() ? `
+        <div class="driver-review-box">
+          <div class="driver-review-label">🎯 Driver Review</div>
+          <textarea id="driver-note-input" placeholder="Optional note for the submitter…" rows="2"></textarea>
+          <div class="driver-review-actions">
+            <button class="btn-advance" onclick="driverApprove('${idea.id}')">✓ Approve (send to Digi Queue)</button>
+            <button class="btn-reject-stage" onclick="driverReject('${idea.id}')">✗ Reject</button>
+          </div>
+        </div>
+      ` : ''}
+
+      <!-- DIGI APPROVAL BOX (only for digi drivers when status is Awaiting Digi Approval) -->
+      ${idea.status === 'Awaiting Digi Approval' ? `
         ${isDigiDriver() ? `
           <div class="digi-approval-box">
             <div class="digi-approval-label">⚑ Digi Driver Decision</div>
@@ -758,7 +776,10 @@ function renderDetail(idea) {
             <span>Awaiting approval from the Digi Community Driver.</span>
           </div>
         `}
-      ` : `
+      ` : ''}
+
+      <!-- PIPELINE ACTION BUTTONS (hide for Driver Review because driver box handles it) -->
+      ${idea.status !== 'Driver Review' ? `
         <div class="pipeline-actions">
           ${(() => {
             const next = getNextStage(idea.status);
@@ -772,16 +793,20 @@ function renderDetail(idea) {
             return '';
           })()}
           ${idea.status !== 'Rejected' && idea.status !== 'Implemented' && idea.status !== 'Awaiting Digi Approval' && idea.status !== 'Awaiting Funnel Response' && idea.status !== 'Funnel Submitted' ? `
+          ${idea.status !== 'Rejected' && idea.status !== 'Implemented' && idea.status !== 'Awaiting Digi Approval' && idea.status !== 'Driver Review' ? `
             <button class="btn-reject-stage" onclick="changeStatus('${idea.id}', 'Rejected')">✗ Reject</button>
           ` : ''}
           ${idea.status === 'Rejected' ? `
             <button class="btn-advance" onclick="changeStatus('${idea.id}', 'Submitted')">↩ Reopen</button>
           ` : ''}
         </div>
-      `}
+      ` : ''}
 
       ${idea.digi_note && idea.status !== 'Rejected' ? `
         <div class="digi-note-display">⚑ Digi note: "${escapeHtml(idea.digi_note)}"</div>
+      ` : ''}
+      ${idea.driver_note && idea.status !== 'Rejected' ? `
+        <div class="driver-note-display">🎯 Driver note: "${escapeHtml(idea.driver_note)}"</div>
       ` : ''}
     </div>
 
@@ -946,6 +971,77 @@ window.digiSendToFunnel = async function(ideaId) {
     console.error('Send to funnel error', err);
     alert('Failed to send funnel request: ' + (err.message || 'unknown'));
     if (btn) { btn.disabled = false; btn.textContent = '↗ Send to Sales Funnel'; }
+// ===================== DRIVER ACTIONS =====================
+window.driverApprove = async function(ideaId) {
+  const { data: idea, error: fetchError } = await supabaseClient
+    .from('automation_ideas')
+    .select('status')
+    .eq('id', ideaId)
+    .single();
+  
+  if (fetchError || !idea) {
+    alert('Could not verify idea status.');
+    return;
+  }
+  
+  if (idea.status !== 'Driver Review') {
+    alert(`Cannot approve: idea is in "${idea.status}" stage, not "Driver Review".`);
+    return;
+  }
+  
+  const note = document.getElementById('driver-note-input')?.value.trim() || null;
+  const btn = document.querySelector('.driver-review-actions .btn-advance');
+  if (btn) { btn.disabled = true; btn.textContent = 'Approving…'; }
+  try {
+    const updates = { status: 'Awaiting Digi Approval', driver_note: note, stage_updated_at: new Date().toISOString() };
+    const { error } = await supabaseClient.from('automation_ideas').update(updates).eq('id', ideaId);
+    if (error) throw error;
+    if (currentDetailIdea && currentDetailIdea.id === ideaId) {
+      currentDetailIdea = { ...currentDetailIdea, ...updates };
+    }
+    await fetchAndRenderIdeas();
+    if (currentDetailIdea && currentDetailIdea.id === ideaId) renderDetail(currentDetailIdea);
+  } catch(err) {
+    console.error('Driver approve error', err);
+    alert('Failed to approve: ' + (err.message || 'unknown'));
+    if (btn) btn.disabled = false;
+  }
+};
+
+
+window.driverReject = async function(ideaId) {
+  const { data: idea, error: fetchError } = await supabaseClient
+    .from('automation_ideas')
+    .select('status')
+    .eq('id', ideaId)
+    .single();
+  
+  if (fetchError || !idea) {
+    alert('Could not verify idea status.');
+    return;
+  }
+  
+  if (idea.status !== 'Driver Review') {
+    alert(`Cannot reject: idea is in "${idea.status}" stage, not "Driver Review".`);
+    return;
+  }
+  
+  const note = document.getElementById('driver-note-input')?.value.trim() || null;
+  const btn = document.querySelector('.driver-review-actions .btn-reject-stage');
+  if (btn) { btn.disabled = true; btn.textContent = 'Rejecting…'; }
+  try {
+    const updates = { status: 'Rejected', driver_note: note, stage_updated_at: new Date().toISOString() };
+    const { error } = await supabaseClient.from('automation_ideas').update(updates).eq('id', ideaId);
+    if (error) throw error;
+    if (currentDetailIdea && currentDetailIdea.id === ideaId) {
+      currentDetailIdea = { ...currentDetailIdea, ...updates };
+    }
+    await fetchAndRenderIdeas();
+    if (currentDetailIdea && currentDetailIdea.id === ideaId) renderDetail(currentDetailIdea);
+  } catch(err) {
+    console.error('Driver reject error', err);
+    alert('Failed to reject: ' + (err.message || 'unknown'));
+    if (btn) btn.disabled = false;
   }
 };
 

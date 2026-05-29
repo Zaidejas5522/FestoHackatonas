@@ -1161,3 +1161,71 @@ body.theme-light .btn-advance { color: #fff; }
 /* ── FUNNEL STAGE BADGE ─────────────────────────── */
 .stage-funnel      { background: rgba(123,97,255,.15); color: var(--accent2); }
 .stage-funnel-done { background: rgba(200,247,74,.12); color: var(--accent);  }
+/* ── DRIVER REVIEW STAGE BADGE ────────────────────── */
+.stage-driver {
+  background: rgba(255, 193, 7, 0.2);
+  color: #ffc107;
+  border-left-color: #ffc107;
+}
+
+/* ── DRIVER TAB (same style as digi tab) ──────────── */
+.nav-tab--driver { color: #ffc107 !important; }
+.nav-tab--driver.active { color: #ffc107 !important; }
+.nav-tab--driver::after { background: #ffc107 !important; }
+.nav-tab--driver:hover { color: #ffc107 !important; opacity: .85; }
+
+/* ── DRIVER REVIEW BOX (in detail view) ───────────── */
+.driver-review-box {
+  background: rgba(255, 193, 7, 0.07);
+  border: 1px solid rgba(255, 193, 7, 0.3);
+  border-radius: 12px;
+  padding: 20px 22px;
+  margin-bottom: 18px;
+}
+
+.driver-review-label {
+  font-family: 'Syne', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: #ffc107;
+  margin-bottom: 12px;
+}
+
+.driver-review-box textarea {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+  padding: 10px 13px;
+  outline: none;
+  resize: vertical;
+  margin-bottom: 14px;
+  transition: border-color .2s;
+}
+.driver-review-box textarea:focus { border-color: #ffc107; }
+
+.driver-review-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* ── DRIVER NOTE DISPLAY ──────────────────────────── */
+.driver-note-display {
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: .03em;
+  font-style: italic;
+}
+.driver-note-inline {
+  display: block;
+  margin-top: 4px;
+  font-style: italic;
+  color: var(--muted);
+}
