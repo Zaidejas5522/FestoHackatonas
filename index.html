@@ -7,6 +7,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
 
@@ -97,7 +98,8 @@
         <button class="nav-tab" data-tab="approved" onclick="switchTab('approved')">⚙ In Progress</button>
         <button class="nav-tab nav-tab--digi" id="digi-tab" data-tab="digi" onclick="switchTab('digi')" style="display:none">⚑ Digi Queue</button>
         <button class="nav-tab nav-tab--driver" id="driver-tab" data-tab="driver" onclick="switchTab('driver')" style="display:none">Driver Review </button>
-        <button class="nav-tab nav-tab--hold" id="hold-tab" data-tab="hold" onclick="switchTab('hold')" style="display:none">⏸ On Hold</button>
+         <button class="nav-tab nav-tab--hold" id="hold-tab" data-tab="hold" onclick="switchTab('hold')" style="display:none">⏸ On Hold</button>
+        <button class="nav-tab" id="stats-tab" data-tab="stats" onclick="showStatsView()">📊 Statistics</button>
       </nav>
     </div>
     <div class="topbar-right">
@@ -134,6 +136,33 @@
     <div style="font-size:12px;color:var(--muted);letter-spacing:.06em;">AUTOMATION IDEA DETAIL</div>
   </div>
   <div class="detail-body" id="detail-body"></div>
+</div>
+
+<!-- ── STATISTICS VIEW ───────────────────────────────── -->
+<div id="stats-view" style="display:none; min-height:100vh;">
+  <div class="stats-topbar">
+    <button class="btn btn-back btn-sm" onclick="showDashboard()">← Back to Dashboard</button>
+    <div style="font-size:12px;color:var(--muted);letter-spacing:.06em;">IDEA STATISTICS</div>
+  </div>
+  <div class="stats-container">
+    <div class="stats-cards">
+      <div class="stat-card">
+        <div class="stat-number" id="stat-total">0</div>
+        <div class="stat-label">Total Ideas</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number" id="stat-development">0</div>
+        <div class="stat-label">In Development / Testing / Implemented</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number" id="stat-implemented">0</div>
+        <div class="stat-label">Fully Implemented</div>
+      </div>
+    </div>
+    <div class="chart-container">
+      <canvas id="scoreChart" width="800" height="400"></canvas>
+    </div>
+  </div>
 </div>
 
 <!-- ── MODAL ───────────────────────────────────────── -->
@@ -203,5 +232,6 @@
 </div>
 
 <script src="app.js"></script>
+<script src="stats.js"></script>
 </body>
 </html>
