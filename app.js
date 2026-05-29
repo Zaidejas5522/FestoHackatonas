@@ -890,6 +890,80 @@ window.digiReject = async function(ideaId) {
   }
 };
 
+// ===================== DRIVER ACTIONS =====================
+window.driverApprove = async function(ideaId) {
+  const { data: idea, error: fetchError } = await supabaseClient
+    .from('automation_ideas')
+    .select('status')
+    .eq('id', ideaId)
+    .single();
+  
+  if (fetchError || !idea) {
+    alert('Could not verify idea status.');
+    return;
+  }
+  
+  if (idea.status !== 'Driver Review') {
+    alert(`Cannot approve: idea is in "${idea.status}" stage, not "Driver Review".`);
+    return;
+  }
+  
+  const note = document.getElementById('driver-note-input')?.value.trim() || null;
+  const btn = document.querySelector('.driver-review-actions .btn-advance');
+  if (btn) { btn.disabled = true; btn.textContent = 'Approving…'; }
+  try {
+    const updates = { status: 'Awaiting Digi Approval', driver_note: note, stage_updated_at: new Date().toISOString() };
+    const { error } = await supabaseClient.from('automation_ideas').update(updates).eq('id', ideaId);
+    if (error) throw error;
+    if (currentDetailIdea && currentDetailIdea.id === ideaId) {
+      currentDetailIdea = { ...currentDetailIdea, ...updates };
+    }
+    await fetchAndRenderIdeas();
+    if (currentDetailIdea && currentDetailIdea.id === ideaId) renderDetail(currentDetailIdea);
+  } catch(err) {
+    console.error('Driver approve error', err);
+    alert('Failed to approve: ' + (err.message || 'unknown'));
+    if (btn) btn.disabled = false;
+  }
+};
+
+
+window.driverReject = async function(ideaId) {
+  const { data: idea, error: fetchError } = await supabaseClient
+    .from('automation_ideas')
+    .select('status')
+    .eq('id', ideaId)
+    .single();
+  
+  if (fetchError || !idea) {
+    alert('Could not verify idea status.');
+    return;
+  }
+  
+  if (idea.status !== 'Driver Review') {
+    alert(`Cannot reject: idea is in "${idea.status}" stage, not "Driver Review".`);
+    return;
+  }
+  
+  const note = document.getElementById('driver-note-input')?.value.trim() || null;
+  const btn = document.querySelector('.driver-review-actions .btn-reject-stage');
+  if (btn) { btn.disabled = true; btn.textContent = 'Rejecting…'; }
+  try {
+    const updates = { status: 'Rejected', driver_note: note, stage_updated_at: new Date().toISOString() };
+    const { error } = await supabaseClient.from('automation_ideas').update(updates).eq('id', ideaId);
+    if (error) throw error;
+    if (currentDetailIdea && currentDetailIdea.id === ideaId) {
+      currentDetailIdea = { ...currentDetailIdea, ...updates };
+    }
+    await fetchAndRenderIdeas();
+    if (currentDetailIdea && currentDetailIdea.id === ideaId) renderDetail(currentDetailIdea);
+  } catch(err) {
+    console.error('Driver reject error', err);
+    alert('Failed to reject: ' + (err.message || 'unknown'));
+    if (btn) btn.disabled = false;
+  }
+};
+
 // ===================== MODAL & FORM =====================
 function openForm() {
   document.getElementById('modal-overlay').classList.add('open');
