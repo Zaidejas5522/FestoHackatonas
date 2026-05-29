@@ -145,6 +145,25 @@
     <div style="font-size:12px;color:var(--muted);letter-spacing:.06em;">IDEA STATISTICS</div>
   </div>
   <div class="stats-container">
+    <!-- Filter bar -->
+    <div class="stats-filters">
+      <div class="filter-group">
+        <label>Department</label>
+        <select id="stats-dept-select">
+          <option value="">Loading departments...</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>User (email or name)</label>
+        <input type="text" id="stats-user-input" list="stats-user-datalist" placeholder="Type to search user...">
+        <datalist id="stats-user-datalist"></datalist>
+      </div>
+      <div class="filter-group">
+        <button id="stats-reset-btn" class="btn btn-sm">Reset filters</button>
+      </div>
+    </div>
+
+    <!-- Statistics cards -->
     <div class="stats-cards">
       <div class="stat-card">
         <div class="stat-number" id="stat-total">0</div>
