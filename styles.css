@@ -1306,3 +1306,48 @@ body.theme-light .btn-advance { color: #fff; }
 }
 .btn-consult:hover:not(:disabled) { background: #9b82ff; color: #fff; }
 .btn-consult:disabled { opacity: .4; cursor: not-allowed; }
+
+/* ── STATISTICS FILTERS ────────────────────────────── */
+.stats-filters {
+  display: flex;
+  gap: 20px;
+  align-items: flex-end;
+  margin-bottom: 32px;
+  flex-wrap: wrap;
+  background: var(--surface2);
+  padding: 20px 24px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 200px;
+}
+.filter-group label {
+  font-size: 10px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 0;
+}
+.filter-group select,
+.filter-group input {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+  padding: 8px 12px;
+  outline: none;
+}
+.filter-group button {
+  background: var(--accent2);
+  color: #fff;
+  border: none;
+  padding: 8px 16px;
+  font-size: 12px;
+  cursor: pointer;
+}
