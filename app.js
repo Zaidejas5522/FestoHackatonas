@@ -205,6 +205,9 @@ function showDashboard() {
   const driverTab = document.getElementById('driver-tab');
   if (driverTab) driverTab.style.display = isDriver() ? '' : 'none';
 
+  const driverImportantTab = document.getElementById('driver-important-tab');
+  if (driverImportantTab) driverImportantTab.style.display = isDriver() ? '' : 'none';
+
   // Reset to all-ideas tab
   activeTab = 'all';
   document.querySelectorAll('.nav-tab').forEach(el => {
@@ -346,10 +349,10 @@ async function rateIdeaWithAI(idea, { showLoading = false } = {}) {
     // Determine status based on score range
     let newStatus;
     let aiDecision; // for display
-    if (safeScore >= 66) {
+    if (safeScore >= 95) {
       newStatus = 'Awaiting Digi Approval';
       aiDecision = 'Approved';
-    } else if (safeScore >= 50 && safeScore <= 65) {
+    } else if (safeScore >= 50 && safeScore <= 94) {
       newStatus = 'Driver Review';
       aiDecision = 'Borderline';
     } else {
@@ -446,7 +449,12 @@ function renderIdeas() {
       i.status === 'Awaiting Funnel Response' ||
       i.status === 'Funnel Submitted'
     );
+  } else if (activeTab === 'driver') {
+    filtered = filtered.filter(i => i.status === 'Driver Review');
   }
+   else if (activeTab === 'driver-important') {
+  filtered = filtered.filter(i => i.status === 'Driver Review' && (i.ai_score || 0) >= 70);
+}
 
   if (statusFilter !== 'All') filtered = filtered.filter(i => i.status === statusFilter);
   if (searchTerm.trim()) {
@@ -458,11 +466,17 @@ function renderIdeas() {
   }
 
   if (filtered.length === 0) {
-    const msg = activeTab === 'approved'
-      ? '⚙ No ideas currently in development or implemented yet.'
-      : activeTab === 'digi'
-      ? '⚑ No ideas awaiting your approval right now.'
-      : '✨ No ideas found. Create one!';
+    let msg = '✨ No ideas found. Create one!';
+    if (activeTab === 'approved') {
+      msg = '⚙ No ideas currently in development or implemented yet.';
+    } else if (activeTab === 'digi') {
+      msg = '⚑ No ideas awaiting your approval right now.';
+    } else if (activeTab === 'driver') {
+      msg = '🎯 No ideas awaiting driver review.';
+    }
+    else if( activeTab === 'driver-important') {
+      msg = '❗ No important ideas awaiting driver review.';
+    }
     grid.innerHTML = `<div class="empty-state">${msg}</div>`;
     return;
   }
