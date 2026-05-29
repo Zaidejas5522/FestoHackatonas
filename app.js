@@ -2,14 +2,22 @@
 const SUPABASE_URL      = "https://qgtwismenwfiipmvkjcm.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFndHdpc21lbndmaWlwbXZramNtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5NzYxMDQsImV4cCI6MjA5NTU1MjEwNH0.iqrPgymdol7Z8gzPQF3H84nWRM79Nm8vzo9RMo4GpAI";
 
+// ── FESTO MAIL API ────────────────────────────────────────────────────────────
+// Emails are sent via the local proxy (email-server.js) which forwards to the
+// Festo internal mail API over VPN.  The browser cannot reach the Festo host
+// directly because of CORS; the proxy runs on localhost and has no such restriction.
+//
+// Direct Festo endpoint (for reference / server-side use only):
+//   POST https://prodconf-dev.de.festo.net/mailservice/api/sendMail
+//   Body: { subject, text (HTML string), recipients: [string] }
+const FESTO_MAIL_URL = "http://localhost:3000/send-mail";
+
+// Recipient list for each trigger.
+// DIGI_DRIVER_EMAILS already used for role-check — reused as notification target.
+
 // ── AI API CONFIGURATION ──────────────────────────────────────────────────────
-// Set your OpenAI key here. When switching to FestoGPT, only change these three
-// values: AI_API_URL, AI_API_KEY, AI_MODEL — everything else stays the same.
-//const AI_API_URL  = "https://api.openai.com/v1/chat/completions";
-const AI_API_KEY         = "EDGE_FUNCTION";   // not the real key — just a truthy non-default value
+const AI_API_KEY         = "EDGE_FUNCTION";
 const AI_SCORE_THRESHOLD = 60;
-//const AI_MODEL    = "gpt-4o-mini";
-//const AI_SCORE_THRESHOLD = 60; // ideas scoring >= this are Approved
 
 // ===================== PIPELINE STAGES =====================
 const PIPELINE_STAGES = [
@@ -26,10 +34,10 @@ const PIPELINE_STAGES = [
 ];
 
 // ===================== DIGI DRIVER ROLE =====================
-// Add the Digi Driver email(s) here. Anyone in this list gets the approval queue.
 const DIGI_DRIVER_EMAILS = [
-  'digidriver@festo.com',   // ← replace with the real Digi Driver email
-  // 'another@festo.com',   // add more if needed
+  'digidriver@festo.com',
+  'lt6u7091@festo.net' // ← replace with real Digi Driver email(s)
+  // 'another@festo.com',
 ];
 // ===================== DRIVER ROLE =====================
 const DRIVER_EMAILS = [
@@ -49,11 +57,9 @@ function getStageIndex(status) {
   const idx = PIPELINE_STAGES.findIndex(s => s.key === status);
   return idx === -1 ? 0 : idx;
 }
-
 function getStageInfo(status) {
   return PIPELINE_STAGES.find(s => s.key === status) || PIPELINE_STAGES[0];
 }
-
 function getNextStage(status) {
   if (status === 'Rejected' || status === 'Implemented') return null;
   const activeStages = PIPELINE_STAGES.filter(s => s.key !== 'Rejected');
@@ -76,7 +82,291 @@ let currentUser       = null;
 let allIdeas          = [];
 let currentDetailIdea = null;
 let ideasChannel      = null;
-let activeTab         = 'all'; // 'all' | 'approved'
+let activeTab         = 'all';
+let currentUserDepartmentId = null;
+
+// ===================== FESTO EMAIL =====================
+/**
+ * Send an email via the Festo internal mail API.
+ *
+ * @param {Object} opts
+ * @param {string}   opts.subject    - Email subject line
+ * @param {string}   opts.htmlBody   - Full HTML string for the email body
+ * @param {string[]} opts.recipients - Array of recipient email addresses
+ * @returns {Promise<boolean>}       - true on success, false on failure (non-throwing)
+ */
+async function sendFestoEmail({ subject, htmlBody, recipients }) {
+  // Guard: skip silently if no recipients
+  if (!recipients || recipients.length === 0) {
+    console.warn('[Email] No recipients — skipping send for:', subject);
+    return false;
+  }
+
+  try {
+    const response = await fetch(FESTO_MAIL_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        subject,
+        text: htmlBody,      // the API uses "text" but accepts HTML
+        recipients,
+      }),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => response.status);
+      console.error('[Email] API error:', response.status, errText);
+      return false;
+    }
+
+    console.log('[Email] Sent successfully:', subject, '→', recipients);
+    return true;
+  } catch (err) {
+    console.error('[Email] Network error:', err.message);
+    return false;
+  }
+}
+
+// ── EMAIL TEMPLATES ───────────────────────────────────────────────────────────
+
+function emailBase(contentHtml) {
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>IdeaFlow Notification</title>
+<style>
+  body{margin:0;padding:0;background:#0c0c0f;font-family:'Helvetica Neue',Arial,sans-serif;color:#e8e8f0;}
+  .wrap{max-width:600px;margin:40px auto;background:#141418;border:1px solid #2a2a35;border-radius:16px;overflow:hidden;}
+  .header{background:#1c1c22;padding:28px 36px;border-bottom:1px solid #2a2a35;}
+  .logo{font-size:22px;font-weight:900;letter-spacing:-1px;color:#e8e8f0;}
+  .logo span{color:#c8f74a;}
+  .body{padding:32px 36px;}
+  h2{margin:0 0 16px;font-size:20px;font-weight:700;color:#e8e8f0;}
+  p{margin:0 0 14px;font-size:14px;line-height:1.7;color:#a0a0b8;}
+  .idea-box{background:#1c1c22;border:1px solid #2a2a35;border-radius:10px;padding:18px 20px;margin:20px 0;}
+  .idea-box .label{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#6b6b80;margin-bottom:6px;}
+  .idea-box .value{font-size:15px;font-weight:600;color:#e8e8f0;}
+  .badge{display:inline-block;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;letter-spacing:.06em;}
+  .badge-green{background:rgba(74,247,142,.15);color:#4af78e;border:1px solid rgba(74,247,142,.3);}
+  .badge-red{background:rgba(247,97,74,.15);color:#f7614a;border:1px solid rgba(247,97,74,.3);}
+  .badge-yellow{background:rgba(247,201,72,.15);color:#f7c948;border:1px solid rgba(247,201,72,.3);}
+  .badge-purple{background:rgba(123,97,255,.15);color:#9b82ff;border:1px solid rgba(123,97,255,.3);}
+  .btn{display:inline-block;margin-top:20px;padding:12px 24px;background:#7b61ff;color:#fff;border-radius:8px;font-size:14px;font-weight:700;text-decoration:none;letter-spacing:.04em;}
+  .footer{padding:20px 36px;border-top:1px solid #2a2a35;font-size:11px;color:#6b6b80;text-align:center;line-height:1.6;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header"><div class="logo">idea<span>flow</span></div></div>
+  <div class="body">${contentHtml}</div>
+  <div class="footer">IdeaFlow — Festo Automation Ideas Platform<br>This is an automated notification. Do not reply to this email.</div>
+</div>
+</body>
+</html>`;
+}
+
+function emailNewIdeaSubmitted(idea) {
+  return {
+    subject: `[IdeaFlow] New idea submitted: ${idea.automation_name}`,
+    htmlBody: emailBase(`
+      <h2>New Automation Idea Submitted</h2>
+      <p>A new idea has been submitted and is queued for AI review.</p>
+      <div class="idea-box">
+        <div class="label">Idea Name</div>
+        <div class="value">${escapeHtml(idea.automation_name)}</div>
+      </div>
+      <div class="idea-box">
+        <div class="label">Submitted by</div>
+        <div class="value">${escapeHtml(idea.idea_author)}</div>
+      </div>
+      <div class="idea-box">
+        <div class="label">Description</div>
+        <div class="value" style="font-size:13px;font-weight:400;line-height:1.6;">${escapeHtml(idea.description || 'No description provided.')}</div>
+      </div>
+      <p>The AI will automatically rate this idea. You will receive another notification once the review is complete.</p>
+    `),
+  };
+}
+
+function emailAIReviewComplete(idea, aiScore, aiDecision) {
+  const badgeClass = aiDecision === 'Approved' ? 'badge-green' : 'badge-red';
+  const nextStep   = aiDecision === 'Approved'
+    ? 'The idea has been forwarded to the Digi Community Driver for final approval.'
+    : 'The idea has been marked as Rejected based on the AI score.';
+  return {
+    subject: `[IdeaFlow] AI review complete — ${idea.automation_name} (Score: ${aiScore}%)`,
+    htmlBody: emailBase(`
+      <h2>AI Review Complete</h2>
+      <p>The AI has finished reviewing the following idea:</p>
+      <div class="idea-box">
+        <div class="label">Idea Name</div>
+        <div class="value">${escapeHtml(idea.automation_name)}</div>
+      </div>
+      <div class="idea-box">
+        <div class="label">AI Score</div>
+        <div class="value">${aiScore}% &nbsp;<span class="badge ${badgeClass}">${aiDecision}</span></div>
+      </div>
+      ${idea.ai_summary ? `
+      <div class="idea-box">
+        <div class="label">AI Summary</div>
+        <div class="value" style="font-size:13px;font-weight:400;line-height:1.6;">${escapeHtml(idea.ai_summary)}</div>
+      </div>` : ''}
+      <p>${nextStep}</p>
+    `),
+  };
+}
+
+function emailAwaitingDigiApproval(idea, aiScore) {
+  return {
+    subject: `[IdeaFlow] ⚑ Idea awaiting your approval: ${idea.automation_name}`,
+    htmlBody: emailBase(`
+      <h2>⚑ Action Required — Digi Driver Approval</h2>
+      <p>An idea has passed AI review and is awaiting your decision.</p>
+      <div class="idea-box">
+        <div class="label">Idea Name</div>
+        <div class="value">${escapeHtml(idea.automation_name)}</div>
+      </div>
+      <div class="idea-box">
+        <div class="label">Submitted by</div>
+        <div class="value">${escapeHtml(idea.idea_author)}</div>
+      </div>
+      <div class="idea-box">
+        <div class="label">AI Score</div>
+        <div class="value">${aiScore != null ? aiScore + '%' : '—'} &nbsp;<span class="badge badge-green">AI Approved</span></div>
+      </div>
+      <div class="idea-box">
+        <div class="label">Weekly Hours Saved</div>
+        <div class="value">${idea.weekly_hours != null ? idea.weekly_hours + 'h / week' : '—'}</div>
+      </div>
+      <p>Please log in to IdeaFlow to approve, send to the Sales Funnel, or reject this idea.</p>
+    `),
+  };
+}
+
+function emailApprovedForDevelopment(idea, digiNote) {
+  return {
+    subject: `[IdeaFlow] ✓ Your idea has been approved for development: ${idea.automation_name}`,
+    htmlBody: emailBase(`
+      <h2>✓ Approved for Development!</h2>
+      <p>Great news — your automation idea has been approved by the Digi Community Driver and is now <strong>In Development</strong>.</p>
+      <div class="idea-box">
+        <div class="label">Idea Name</div>
+        <div class="value">${escapeHtml(idea.automation_name)}</div>
+      </div>
+      ${digiNote ? `
+      <div class="idea-box">
+        <div class="label">Note from Digi Driver</div>
+        <div class="value" style="font-size:13px;font-weight:400;line-height:1.6;">${escapeHtml(digiNote)}</div>
+      </div>` : ''}
+      <p>The development team will be in touch. You can track the progress of your idea in IdeaFlow at any time.</p>
+    `),
+  };
+}
+
+function emailSentToFunnel(idea, funnelLink, digiNote) {
+  return {
+    subject: `[IdeaFlow] ↗ Action required — Sales Funnel for: ${idea.automation_name}`,
+    htmlBody: emailBase(`
+      <h2>↗ Sales Funnel Request</h2>
+      <p>The Digi Community Driver has reviewed your idea and would like more information before proceeding.</p>
+      <div class="idea-box">
+        <div class="label">Idea Name</div>
+        <div class="value">${escapeHtml(idea.automation_name)}</div>
+      </div>
+      ${digiNote ? `
+      <div class="idea-box">
+        <div class="label">Note from Digi Driver</div>
+        <div class="value" style="font-size:13px;font-weight:400;line-height:1.6;color:#f7c948;">${escapeHtml(digiNote)}</div>
+      </div>` : ''}
+      <p>Please fill out the Sales Funnel form using the link below. <strong>This link can only be used once and expires in 48 hours.</strong></p>
+      ${funnelLink ? `<a class="btn" href="${funnelLink}">↗ Open Sales Funnel Form</a>` : ''}
+    `),
+  };
+}
+
+function emailFunnelSubmitted(idea, answers) {
+  return {
+    subject: `[IdeaFlow] ↗ Funnel response received: ${idea.automation_name}`,
+    htmlBody: emailBase(`
+      <h2>↗ Sales Funnel Response Received</h2>
+      <p>The submitter has completed the Sales Funnel form for the following idea:</p>
+      <div class="idea-box">
+        <div class="label">Idea Name</div>
+        <div class="value">${escapeHtml(idea.automation_name)}</div>
+      </div>
+      <div class="idea-box">
+        <div class="label">Submitted by</div>
+        <div class="value">${escapeHtml(idea.idea_author)}</div>
+      </div>
+      ${answers?.answer_problem ? `
+      <div class="idea-box">
+        <div class="label">Core Business Problem</div>
+        <div class="value" style="font-size:13px;font-weight:400;line-height:1.6;">${escapeHtml(answers.answer_problem)}</div>
+      </div>` : ''}
+      ${answers?.answer_outcome ? `
+      <div class="idea-box">
+        <div class="label">Expected Outcome</div>
+        <div class="value" style="font-size:13px;font-weight:400;line-height:1.6;">${escapeHtml(answers.answer_outcome)}</div>
+      </div>` : ''}
+      ${answers?.answer_priority ? `
+      <div class="idea-box">
+        <div class="label">Priority / Urgency</div>
+        <div class="value" style="font-size:13px;font-weight:400;line-height:1.6;">${escapeHtml(answers.answer_priority)}</div>
+      </div>` : ''}
+      <p>Please log in to IdeaFlow to review the responses and make a final decision.</p>
+    `),
+  };
+}
+
+function emailRejected(idea, digiNote, rejectedByAI) {
+  const reason = rejectedByAI
+    ? 'Your idea was reviewed by the AI scoring system and did not meet the minimum viability threshold.'
+    : 'Your idea was reviewed by the Digi Community Driver and was not approved for development at this time.';
+  return {
+    subject: `[IdeaFlow] ✗ Update on your idea: ${idea.automation_name}`,
+    htmlBody: emailBase(`
+      <h2>✗ Idea Not Approved</h2>
+      <p>${reason}</p>
+      <div class="idea-box">
+        <div class="label">Idea Name</div>
+        <div class="value">${escapeHtml(idea.automation_name)}</div>
+      </div>
+      ${idea.ai_score != null ? `
+      <div class="idea-box">
+        <div class="label">AI Score</div>
+        <div class="value">${idea.ai_score}% &nbsp;<span class="badge badge-red">Below threshold</span></div>
+      </div>` : ''}
+      ${digiNote ? `
+      <div class="idea-box">
+        <div class="label">Note from Digi Driver</div>
+        <div class="value" style="font-size:13px;font-weight:400;line-height:1.6;">${escapeHtml(digiNote)}</div>
+      </div>` : ''}
+      <p>You can refine and resubmit your idea at any time through IdeaFlow.</p>
+    `),
+  };
+}
+
+function emailStatusChanged(idea, newStatus) {
+  const stage = getStageInfo(newStatus);
+  return {
+    subject: `[IdeaFlow] Status update — ${idea.automation_name} → ${newStatus}`,
+    htmlBody: emailBase(`
+      <h2>Pipeline Status Update</h2>
+      <p>The status of your automation idea has been updated.</p>
+      <div class="idea-box">
+        <div class="label">Idea Name</div>
+        <div class="value">${escapeHtml(idea.automation_name)}</div>
+      </div>
+      <div class="idea-box">
+        <div class="label">New Status</div>
+        <div class="value"><span class="badge badge-purple">${stage.icon} ${newStatus}</span></div>
+      </div>
+      <p>Log in to IdeaFlow to view full details and track progress.</p>
+    `),
+  };
+}
 
 // ===================== THEME =====================
 function applyTheme(theme) {
@@ -84,7 +374,6 @@ function applyTheme(theme) {
   const btn = document.getElementById('theme-toggle');
   if (btn) btn.textContent = theme === 'light' ? '🌑' : '🌙';
 }
-
 window.toggleTheme = function() {
   const isLight = document.body.classList.contains('theme-light');
   const next = isLight ? 'dark' : 'light';
@@ -140,10 +429,10 @@ window.handleRegister = async function() {
   const email     = document.getElementById('reg-email').value.trim();
   const password  = document.getElementById('reg-password').value;
   const password2 = document.getElementById('reg-password2').value;
-  if (!name)                       { setStatus('register-status', 'Full name is required.', 'error'); return; }
+  if (!name)                         { setStatus('register-status', 'Full name is required.', 'error'); return; }
   if (!email || !email.includes('@')) { setStatus('register-status', 'Please enter a valid email.', 'error'); return; }
-  if (password.length < 6)         { setStatus('register-status', 'Password must be at least 6 characters.', 'error'); return; }
-  if (password !== password2)      { setStatus('register-status', 'Passwords do not match.', 'error'); return; }
+  if (password.length < 6)           { setStatus('register-status', 'Password must be at least 6 characters.', 'error'); return; }
+  if (password !== password2)        { setStatus('register-status', 'Passwords do not match.', 'error'); return; }
   const btn = document.getElementById('register-btn');
   btn.disabled = true; btn.textContent = 'Creating account…';
   setStatus('register-status', '', 'info');
@@ -192,16 +481,30 @@ window.switchTab = function(tab) {
   renderIdeas();
 };
 
-function showDashboard() {
+async function showDashboard() {
   showView('dashboard-view');
   const email = currentUser?.email || currentUser?.user_metadata?.full_name || '';
   document.getElementById('user-display').textContent = email;
+
+  // Fetch current user's department ID from profiles table
+  if (currentUser) {
+    const { data: profile, error } = await supabaseClient
+      .from('profiles')
+      .select('department_id')
+      .eq('id', currentUser.id)
+      .single();
+    if (!error && profile) {
+      currentUserDepartmentId = profile.department_id;
+    } else {
+      currentUserDepartmentId = null;
+    }
+  }
 
   // Show/hide Digi Driver tab based on role
   const digiTab = document.getElementById('digi-tab');
   if (digiTab) digiTab.style.display = isDigiDriver() ? '' : 'none';
 
-  // Show/hide  Driver tab based on role
+  // Show/hide Driver tab based on role
   const driverTab = document.getElementById('driver-tab');
   if (driverTab) driverTab.style.display = isDriver() ? '' : 'none';
 
@@ -222,10 +525,37 @@ function showDashboard() {
 // ===================== SUPABASE CRUD =====================
 async function fetchIdeasFromDB() {
   if (!supabaseClient || !currentUser) return [];
-  const { data, error } = await supabaseClient
-    .from('automation_ideas').select('*').order('created_at', { ascending: false });
+  
+  const { data: ideas, error } = await supabaseClient
+    .from('automation_ideas')
+    .select('*')
+    .order('created_at', { ascending: false });
+  
   if (error) { console.error("Fetch error:", error); return []; }
-  return data || [];
+  if (!ideas || ideas.length === 0) return [];
+  
+  const deptIds = [...new Set(ideas.map(i => i.department_id).filter(id => id))];
+  console.log("Department IDs to fetch:", deptIds); // <-- ADD THIS
+  
+  if (deptIds.length === 0) return ideas;
+  
+  const { data: departments, error: deptError } = await supabaseClient
+    .from('department')
+    .select('id, name')
+    .in('id', deptIds);
+  
+  if (deptError) { console.error("Department fetch error:", deptError); return ideas; }
+  console.log("Fetched departments:", departments); // <-- ADD THIS
+  
+  const deptMap = {};
+  departments.forEach(d => { deptMap[d.id] = d.name; });
+  
+  const ideasWithDept = ideas.map(idea => ({
+    ...idea,
+    departmentName: idea.department_id ? deptMap[idea.department_id] : null
+  }));
+  
+  return ideasWithDept;
 }
 
 async function fetchAndRenderIdeas() {
@@ -234,29 +564,67 @@ async function fetchAndRenderIdeas() {
   renderIdeas();
 }
 
+//HELPER METHOD FOR DEPARTMENT
+async function getCurrentUserDepartment() {
+  if (!currentUser) return null;
+  const { data, error } = await supabaseClient
+    .from('profiles')
+    .select('department_id')
+    .eq('id', currentUser.id)
+    .single();
+  if (error || !data) return null;
+  return data.department_id;
+}
 async function insertIdea(d) {
   if (!supabaseClient || !currentUser) throw new Error("Not authenticated");
+  
+  // Get the user's department
+  const deptId = await getCurrentUserDepartment();
+  
   const row = {
-    idea_author: d.idea_author, automation_name: d.automation_name, description: d.description,
-    standardized_process_score: d.standardized_process_score, digital_input: d.digital_input,
-    rule_based: d.rule_based, software_systems: d.software_systems, weekly_hours: d.weekly_hours,
-    speed_criticality: d.speed_criticality, test_data_available: d.test_data_available,
-    process_documented: d.process_documented, status: 'Submitted'
+ idea_author: d.idea_author,
+    automation_name: d.automation_name,
+    description: d.description,
+    standardized_process_score: d.standardized_process_score,
+    digital_input: d.digital_input,
+    rule_based: d.rule_based,
+    software_systems: d.software_systems,
+    weekly_hours: d.weekly_hours,
+    speed_criticality: d.speed_criticality,
+    test_data_available: d.test_data_available,
+    process_documented: d.process_documented,
+    status: 'Submitted',
+    submitter_email: currentUser.email || null,   // from Lukas branch
+    department_id: deptId                         // from UNSTABLEdev branch
   };
   const { data, error } = await supabaseClient.from('automation_ideas').insert([row]).select();
   if (error) throw error;
   return data[0];
 }
 
+
+
 async function updateIdeaStatus(ideaId, newStatus) {
   if (!supabaseClient) throw new Error("No client");
-  // stage_updated_at is optional — add the column with: ALTER TABLE automation_ideas ADD COLUMN stage_updated_at timestamptz;
   const updates = { status: newStatus };
   try { updates.stage_updated_at = new Date().toISOString(); } catch(e) {}
   const { error } = await supabaseClient.from('automation_ideas')
-    .update(updates)
-    .eq('id', ideaId);
+    .update(updates).eq('id', ideaId);
   if (error) throw error;
+
+  // ── EMAIL TRIGGER: generic status change ──────────────────────────────────
+  const idea = allIdeas.find(i => i.id === ideaId) || currentDetailIdea;
+  if (idea) {
+    const submitterEmail = idea.submitter_email || null;
+    if (newStatus === 'Rejected') {
+      const { subject, htmlBody } = emailRejected(idea, null, false);
+      if (submitterEmail) sendFestoEmail({ subject, htmlBody, recipients: [submitterEmail] });
+    } else if (newStatus === 'In Development' || newStatus === 'Testing' || newStatus === 'Implemented') {
+      const { subject, htmlBody } = emailStatusChanged({ ...idea, status: newStatus }, newStatus);
+      if (submitterEmail) sendFestoEmail({ subject, htmlBody, recipients: [submitterEmail] });
+    }
+  }
+
   await fetchAndRenderIdeas();
   if (currentDetailIdea && currentDetailIdea.id === ideaId) {
     currentDetailIdea.status = newStatus;
@@ -289,7 +657,6 @@ function subscribeToRealtime() {
 }
 
 // ===================== AI RATING ENGINE =====================
-
 function buildRatingPrompt(idea) {
   return `Evaluate this automation idea and return a JSON object with EXACTLY these two fields:
 - "score": integer 0-100 representing overall automation viability
@@ -299,12 +666,12 @@ Idea details:
 - Name: ${idea.automation_name}
 - Description: ${idea.description || 'Not provided'}
 - Submitted by: ${idea.idea_author}
-- Standardized process score: ${idea.standardized_process_score}/10 (how well-defined and repeatable the process is)
-- Digital input: ${idea.digital_input} (whether the process uses digital data)
-- Rule-based: ${idea.rule_based} (whether decisions follow clear rules vs human judgment)
+- Standardized process score: ${idea.standardized_process_score}/10
+- Digital input: ${idea.digital_input}
+- Rule-based: ${idea.rule_based}
 - Software systems involved: ${idea.software_systems}
 - Estimated weekly hours saved: ${idea.weekly_hours != null ? idea.weekly_hours + 'h' : 'Not specified'}
-- Speed criticality: ${idea.speed_criticality}/10 (how time-sensitive the process is)
+- Speed criticality: ${idea.speed_criticality}/10
 - Test data available: ${idea.test_data_available}
 - Process documented: ${idea.process_documented}
 
@@ -317,25 +684,20 @@ Respond with ONLY the JSON object. No markdown, no code fences, no explanation o
 }
 
 async function callAIAPI(idea) {
-  // Get the Supabase Edge Function URL
-  const functionURL = `${SUPABASE_URL}/functions/v1/rate-idea`
-  
+  const functionURL = `${SUPABASE_URL}/functions/v1/rate-idea`;
   const response = await fetch(functionURL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${SUPABASE_ANON_KEY}` // Optional: add auth if needed
+      "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
     },
-    body: JSON.stringify({ idea })
-  })
-
+    body: JSON.stringify({ idea }),
+  });
   if (!response.ok) {
-    const err = await response.json().catch(() => ({}))
-    throw new Error(err?.error || `Edge Function error ${response.status}`)
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err?.error || `Edge Function error ${response.status}`);
   }
-
-  const data = await response.json()
-  return data // { score, summary, decision }
+  return await response.json();
 }
 
 async function rateIdeaWithAI(idea, { showLoading = false } = {}) {
@@ -343,12 +705,11 @@ async function rateIdeaWithAI(idea, { showLoading = false } = {}) {
 
   try {
     const result = await callAIAPI(idea);
-    const { score, summary } = result;   // AI no longer returns decision
+    const { score, summary } = result;
     const safeScore = Math.max(0, Math.min(100, Math.round(score)));
 
-    // Determine status based on score range
     let newStatus;
-    let aiDecision; // for display
+    let aiDecision;
     if (safeScore >= 95) {
       newStatus = 'Awaiting Digi Approval';
       aiDecision = 'Approved';
@@ -363,10 +724,10 @@ async function rateIdeaWithAI(idea, { showLoading = false } = {}) {
     // Update Supabase
     await supabaseClient
       .from('automation_ideas')
-      .update({ 
-        ai_score: safeScore, 
-        ai_summary: summary, 
-        ai_status: aiDecision, 
+      .update({
+        ai_score: safeScore,
+        ai_summary: summary,
+        ai_status: aiDecision,
         status: newStatus,
         stage_updated_at: new Date().toISOString()
       })
@@ -383,6 +744,26 @@ async function rateIdeaWithAI(idea, { showLoading = false } = {}) {
 
     renderIdeas();
     if (currentDetailIdea && currentDetailIdea.id === idea.id) renderDetail(currentDetailIdea);
+
+    // ── EMAIL NOTIFICATIONS ──────────────────────────────────────────────────
+    const updatedIdea = { ...idea, ai_score: safeScore, ai_summary: summary, ai_status: aiDecision, status: newStatus };
+    const submitterEmail = idea.submitter_email || null;
+
+    if (submitterEmail) {
+      const { subject, htmlBody } = emailAIReviewComplete(updatedIdea, safeScore, aiDecision);
+      sendFestoEmail({ subject, htmlBody, recipients: [submitterEmail] });
+    }
+
+    if (aiDecision === 'Approved') {
+      const { subject, htmlBody } = emailAwaitingDigiApproval(updatedIdea, safeScore);
+      sendFestoEmail({ subject, htmlBody, recipients: DIGI_DRIVER_EMAILS });
+    }
+
+    if (aiDecision === 'Rejected' && submitterEmail) {
+      const { subject, htmlBody } = emailRejected(updatedIdea, null, true);
+      sendFestoEmail({ subject, htmlBody, recipients: [submitterEmail] });
+    }
+
     return { score: safeScore, summary, decision: aiDecision };
   } catch(err) {
     console.error('[AI Rating] failed:', err);
@@ -392,13 +773,12 @@ async function rateIdeaWithAI(idea, { showLoading = false } = {}) {
 }
 
 function setCardRatingState(ideaId, state) {
-  const cards = document.querySelectorAll('.idea-card');
-  cards.forEach(card => {
+  document.querySelectorAll('.idea-card').forEach(card => {
     if (card.dataset.id === String(ideaId)) {
       const badge = card.querySelector('.ai-score-badge');
       if (badge) {
         if (state === 'loading') { badge.className = 'ai-score-badge ai-rating'; badge.textContent = 'Rating…'; }
-        if (state === 'error')   { badge.className = 'ai-score-badge ai-error'; badge.textContent = 'AI error'; }
+        if (state === 'error')   { badge.className = 'ai-score-badge ai-error';  badge.textContent = 'AI error'; }
       }
     }
   });
@@ -407,19 +787,12 @@ function setCardRatingState(ideaId, state) {
 window.reRateIdea = async function(ideaId) {
   const idea = allIdeas.find(i => i.id === ideaId) || currentDetailIdea;
   if (!idea) return;
-  // Check API key
-  if (!AI_API_KEY) {
-    alert('AI rating is not configured.');
-    return;
- }
-  // Show loading in detail view
+  if (!AI_API_KEY) { alert('AI rating is not configured.'); return; }
   const btn = document.getElementById('rerate-btn');
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Rating…'; }
   const summaryEl = document.getElementById('ai-summary-text');
   if (summaryEl) summaryEl.textContent = 'Asking AI…';
-
   const result = await rateIdeaWithAI(idea, { showLoading: true });
-
   if (btn) { btn.disabled = false; btn.textContent = '↻ Re-rate with AI'; }
   if (!result && summaryEl) summaryEl.textContent = 'Rating failed. Check the console for details.';
 };
@@ -440,7 +813,6 @@ function renderIdeas() {
 
   let filtered = [...allIdeas];
 
-  // Tab filter
   if (activeTab === 'approved') {
     filtered = filtered.filter(i => i.status === 'In Development' || i.status === 'Testing' || i.status === 'Implemented');
   } else if (activeTab === 'digi') {
@@ -450,11 +822,18 @@ function renderIdeas() {
       i.status === 'Funnel Submitted'
     );
   } else if (activeTab === 'driver') {
-    filtered = filtered.filter(i => i.status === 'Driver Review');
+    // Show only Driver Review ideas from the user's own department
+    filtered = filtered.filter(i =>
+      i.status === 'Driver Review' && i.department_id === currentUserDepartmentId
+    );
+  } else if (activeTab === 'driver-important') {
+    // Show only important (AI score >= 70) Driver Review ideas from own department
+    filtered = filtered.filter(i =>
+      i.status === 'Driver Review' &&
+      (i.ai_score || 0) >= 70 &&
+      i.department_id === currentUserDepartmentId
+    );
   }
-   else if (activeTab === 'driver-important') {
-  filtered = filtered.filter(i => i.status === 'Driver Review' && (i.ai_score || 0) >= 70);
-}
 
   if (statusFilter !== 'All') filtered = filtered.filter(i => i.status === statusFilter);
   if (searchTerm.trim()) {
@@ -472,10 +851,9 @@ function renderIdeas() {
     } else if (activeTab === 'digi') {
       msg = '⚑ No ideas awaiting your approval right now.';
     } else if (activeTab === 'driver') {
-      msg = '🎯 No ideas awaiting driver review.';
-    }
-    else if( activeTab === 'driver-important') {
-      msg = '❗ No important ideas awaiting driver review.';
+      msg = '🎯 No ideas awaiting driver review in your department.';
+    } else if (activeTab === 'driver-important') {
+      msg = '❗ No important ideas awaiting driver review in your department.';
     }
     grid.innerHTML = `<div class="empty-state">${msg}</div>`;
     return;
@@ -488,26 +866,23 @@ function renderIdeas() {
       : `<div class="ai-score-badge ai-pending">Not rated</div>`;
     const stage = getStageInfo(idea.status);
 
+    // Build author + department string
+    let authorDisplay = escapeHtml(idea.idea_author || 'Anonymous');
+    if (idea.departmentName) {
+      authorDisplay += `, Department: ${escapeHtml(idea.departmentName)}`;
+    }
+
     return `
       <div class="idea-card" data-id="${idea.id}" onclick="showDetailById('${idea.id}')">
         <div class="card-header-row">
           <div class="card-title">${escapeHtml(idea.automation_name || '—')}</div>
           ${scoreBadge}
         </div>
-        <div class="card-author">${escapeHtml(idea.idea_author || 'Anonymous')}</div>
+        <div class="card-author">${authorDisplay}</div>
         <div class="card-stats">
-          <div class="card-stat">
-            <strong>${idea.weekly_hours != null ? idea.weekly_hours + 'h' : '—'}</strong>
-            weekly hrs
-          </div>
-          <div class="card-stat">
-            <strong>${idea.standardized_process_score != null ? idea.standardized_process_score + '/10' : '—'}</strong>
-            process std
-          </div>
-          <div class="card-stat">
-            <strong>${idea.speed_criticality != null ? idea.speed_criticality + '/10' : '—'}</strong>
-            speed crit
-          </div>
+          <div class="card-stat"><strong>${idea.weekly_hours != null ? idea.weekly_hours + 'h' : '—'}</strong> weekly hrs</div>
+          <div class="card-stat"><strong>${idea.standardized_process_score != null ? idea.standardized_process_score + '/10' : '—'}</strong> process std</div>
+          <div class="card-stat"><strong>${idea.speed_criticality != null ? idea.speed_criticality + '/10' : '—'}</strong> speed crit</div>
         </div>
         <div class="card-meta">
           ${escapeHtml(idea.software_systems || '—')} systems • ${new Date(idea.created_at).toLocaleDateString()}
@@ -542,7 +917,6 @@ function renderDetail(idea) {
   if (!container) return;
   const yn = v => v || '—';
 
-  // AI analysis section HTML
   const hasAI = idea.ai_score != null;
   const aiSection = `
     <hr class="divider" />
@@ -581,7 +955,10 @@ function renderDetail(idea) {
 
   container.innerHTML = `
     <div class="detail-title" id="d-title">${escapeHtml(idea.automation_name || '—')}</div>
-    <div class="detail-author" id="d-author-disp">Submitted by ${escapeHtml(idea.idea_author || 'Anonymous')}</div>
+    <div class="detail-author" id="d-author-disp">
+  Submitted by ${escapeHtml(idea.idea_author || 'Anonymous')}
+  ${idea.department?.name ? `<span class="detail-dept"> (${escapeHtml(idea.department.name)})</span>` : ''}
+</div>
     <div class="detail-badges">
       <span class="stage-badge ${getStageInfo(idea.status).color}" id="d-badge">${getStageInfo(idea.status).icon} ${idea.status}</span>
       ${idea.ai_score != null ? `<span class="badge-ai-score ${aiScoreColor(idea.ai_score)}">${idea.ai_score}% AI Score</span>` : ''}
@@ -591,74 +968,45 @@ function renderDetail(idea) {
     <div class="detail-edit-panel" id="edit-panel">
       <div class="section-heading">Edit Idea</div>
       <div class="edit-grid">
-        <div class="edit-field">
-          <label>Automation Name</label>
-          <input type="text" id="e-name" value="${escapeHtml(idea.automation_name || '')}">
-        </div>
-        <div class="edit-field">
-          <label>Author</label>
-          <input type="text" id="e-author" value="${escapeHtml(idea.idea_author || '')}">
-        </div>
+        <div class="edit-field"><label>Automation Name</label><input type="text" id="e-name" value="${escapeHtml(idea.automation_name || '')}"></div>
+        <div class="edit-field"><label>Author</label><input type="text" id="e-author" value="${escapeHtml(idea.idea_author || '')}"></div>
       </div>
-      <div class="edit-field">
-        <label>Description</label>
-        <textarea id="e-desc">${escapeHtml(idea.description || '')}</textarea>
-      </div>
+      <div class="edit-field"><label>Description</label><textarea id="e-desc">${escapeHtml(idea.description || '')}</textarea></div>
       <div class="edit-grid">
         <div class="edit-field">
           <label>Standardized Process Score (0–10)</label>
           <div class="range-wrapper">
-            <input type="range" id="e-std" min="0" max="10" value="${idea.standardized_process_score ?? 5}"
-              oninput="document.getElementById('e-std-val').innerText=this.value">
+            <input type="range" id="e-std" min="0" max="10" value="${idea.standardized_process_score ?? 5}" oninput="document.getElementById('e-std-val').innerText=this.value">
             <span class="range-val" id="e-std-val">${idea.standardized_process_score ?? 5}</span>
           </div>
         </div>
         <div class="edit-field">
           <label>Speed Criticality (0–10)</label>
           <div class="range-wrapper">
-            <input type="range" id="e-speed" min="0" max="10" value="${idea.speed_criticality ?? 5}"
-              oninput="document.getElementById('e-speed-val').innerText=this.value">
+            <input type="range" id="e-speed" min="0" max="10" value="${idea.speed_criticality ?? 5}" oninput="document.getElementById('e-speed-val').innerText=this.value">
             <span class="range-val" id="e-speed-val">${idea.speed_criticality ?? 5}</span>
           </div>
         </div>
         <div class="edit-field">
           <label>Digital Input?</label>
-          <select id="e-digital">
-            <option value="">Select…</option>
-            ${['Yes','No','Maybe'].map(v=>`<option${idea.digital_input===v?' selected':''}>${v}</option>`).join('')}
-          </select>
+          <select id="e-digital"><option value="">Select…</option>${['Yes','No','Maybe'].map(v=>`<option${idea.digital_input===v?' selected':''}>${v}</option>`).join('')}</select>
         </div>
         <div class="edit-field">
           <label>Rule-Based?</label>
-          <select id="e-rule">
-            <option value="">Select…</option>
-            ${['Yes','No','Maybe'].map(v=>`<option${idea.rule_based===v?' selected':''}>${v}</option>`).join('')}
-          </select>
+          <select id="e-rule"><option value="">Select…</option>${['Yes','No','Maybe'].map(v=>`<option${idea.rule_based===v?' selected':''}>${v}</option>`).join('')}</select>
         </div>
         <div class="edit-field">
           <label>Software Systems</label>
-          <select id="e-systems">
-            <option value="">Select…</option>
-            ${['1 or less','2','3','4 or more'].map(v=>`<option${idea.software_systems===v?' selected':''}>${v}</option>`).join('')}
-          </select>
+          <select id="e-systems"><option value="">Select…</option>${['1 or less','2','3','4 or more'].map(v=>`<option${idea.software_systems===v?' selected':''}>${v}</option>`).join('')}</select>
         </div>
-        <div class="edit-field">
-          <label>Weekly Hours Saved</label>
-          <input type="number" id="e-hours" value="${idea.weekly_hours ?? ''}" min="0" step="0.5">
-        </div>
+        <div class="edit-field"><label>Weekly Hours Saved</label><input type="number" id="e-hours" value="${idea.weekly_hours ?? ''}" min="0" step="0.5"></div>
         <div class="edit-field">
           <label>Test Data Available?</label>
-          <select id="e-testdata">
-            <option value="">Select…</option>
-            ${['Yes','No'].map(v=>`<option${idea.test_data_available===v?' selected':''}>${v}</option>`).join('')}
-          </select>
+          <select id="e-testdata"><option value="">Select…</option>${['Yes','No'].map(v=>`<option${idea.test_data_available===v?' selected':''}>${v}</option>`).join('')}</select>
         </div>
         <div class="edit-field">
           <label>Process Documented?</label>
-          <select id="e-documented">
-            <option value="">Select…</option>
-            ${['Yes','No'].map(v=>`<option${idea.process_documented===v?' selected':''}>${v}</option>`).join('')}
-          </select>
+          <select id="e-documented"><option value="">Select…</option>${['Yes','No'].map(v=>`<option${idea.process_documented===v?' selected':''}>${v}</option>`).join('')}</select>
         </div>
       </div>
       <div class="edit-actions">
@@ -676,7 +1024,6 @@ function renderDetail(idea) {
         <div class="detail-value">${escapeHtml(idea.description) || '—'}</div>
       </div>
       <hr class="divider" />
-
       <div class="section-heading">§2 — Complexity</div>
       <div class="score-grid">
         <div class="score-box"><div class="score-box-label">Process Score</div><div class="score-box-value">${idea.standardized_process_score != null ? idea.standardized_process_score + '/10' : '—'}</div></div>
@@ -685,26 +1032,22 @@ function renderDetail(idea) {
         <div class="score-box"><div class="score-box-label">Systems</div><div class="score-box-value neutral">${yn(idea.software_systems)}</div></div>
       </div>
       <hr class="divider" />
-
       <div class="section-heading">§3 — Impact</div>
       <div class="score-grid">
         <div class="score-box"><div class="score-box-label">Weekly Hours</div><div class="score-box-value">${idea.weekly_hours != null ? idea.weekly_hours + 'h' : '—'}</div></div>
         <div class="score-box"><div class="score-box-label">Speed Criticality</div><div class="score-box-value">${idea.speed_criticality != null ? idea.speed_criticality + '/10' : '—'}</div></div>
       </div>
       <hr class="divider" />
-
       <div class="section-heading">§4 — Implementation</div>
       <div class="score-grid">
         <div class="score-box"><div class="score-box-label">Test Data</div><div class="score-box-value neutral">${yn(idea.test_data_available)}</div></div>
         <div class="score-box"><div class="score-box-label">Documented</div><div class="score-box-value neutral">${yn(idea.process_documented)}</div></div>
       </div>
       <hr class="divider" />
-
       <div class="detail-section">
         <div class="detail-label">Created</div>
         <div class="detail-value">${new Date(idea.created_at).toLocaleString()}</div>
       </div>
-
       ${aiSection}
     </div>
 
@@ -713,18 +1056,17 @@ function renderDetail(idea) {
       <div class="section-heading">§6 — Pipeline Stage</div>
       <div class="pipeline-stepper">
         ${PIPELINE_STAGES.filter(s => s.key !== 'Rejected').map((stage, idx) => {
-          const currentIdx = getStageIndex(idea.status === 'Rejected' ? 'Rejected' : idea.status);
+          const currentIdx    = getStageIndex(idea.status === 'Rejected' ? 'Rejected' : idea.status);
           const rejectedActive = idea.status === 'Rejected';
-          const isComplete = !rejectedActive && idx < currentIdx;
-          const isActive   = !rejectedActive && idx === currentIdx;
+          const isComplete    = !rejectedActive && idx < currentIdx;
+          const isActive      = !rejectedActive && idx === currentIdx;
           return `
             <div class="pipeline-step ${isComplete ? 'complete' : ''} ${isActive ? 'active' : ''}">
               <div class="pipeline-step-dot">${isComplete ? '✓' : stage.icon}</div>
               <div class="pipeline-step-label">${stage.label}</div>
             </div>
             ${idx < PIPELINE_STAGES.filter(s => s.key !== 'Rejected').length - 1
-              ? `<div class="pipeline-connector ${isComplete ? 'complete' : ''}"></div>`
-              : ''}
+              ? `<div class="pipeline-connector ${isComplete ? 'complete' : ''}"></div>` : ''}
           `;
         }).join('')}
       </div>
@@ -804,14 +1146,14 @@ function renderDetail(idea) {
         <div class="pipeline-actions">
           ${(() => {
             const next = getNextStage(idea.status);
-            if (next) return `
+            if (next && next.key !== 'Awaiting Digi Approval' && next.key !== 'Awaiting Funnel Response' && next.key !== 'Funnel Submitted') return `
               <button class="btn-advance" onclick="changeStatus('${idea.id}', '${next.key}')">
                 ${next.icon} Advance to ${next.label} →
               </button>`;
             if (idea.status === 'Implemented') return `<div class="pipeline-complete-badge">★ Fully Implemented</div>`;
             return '';
           })()}
-          ${idea.status !== 'Rejected' && idea.status !== 'Implemented' ? `
+          ${idea.status !== 'Rejected' && idea.status !== 'Implemented' && idea.status !== 'Awaiting Digi Approval' && idea.status !== 'Awaiting Funnel Response' && idea.status !== 'Funnel Submitted' ? `
             <button class="btn-reject-stage" onclick="changeStatus('${idea.id}', 'Rejected')">✗ Reject</button>
           ` : ''}
           ${idea.status === 'Rejected' ? `
@@ -837,13 +1179,13 @@ let _editMode = false;
 
 window.toggleEditMode = function() {
   _editMode = !_editMode;
-  const panel = document.getElementById('edit-panel');
+  const panel     = document.getElementById('edit-panel');
   const readPanel = document.getElementById('read-panel');
-  const btn = document.getElementById('edit-btn');
-  if (panel) panel.classList.toggle('visible', _editMode);
+  const btn       = document.getElementById('edit-btn');
+  if (panel)     panel.classList.toggle('visible', _editMode);
   if (readPanel) readPanel.style.display = _editMode ? 'none' : '';
-  if (btn) { btn.textContent = _editMode ? '✎ Editing…' : '✎ Edit'; btn.classList.toggle('active', _editMode); }
-  if (_editMode) { document.getElementById('e-name')?.focus(); }
+  if (btn)       { btn.textContent = _editMode ? '✎ Editing…' : '✎ Edit'; btn.classList.toggle('active', _editMode); }
+  if (_editMode) document.getElementById('e-name')?.focus();
 };
 
 window.discardEdit = function() {
@@ -852,10 +1194,9 @@ window.discardEdit = function() {
 };
 
 window.saveEdit = async function() {
-  const btn = document.getElementById('save-btn');
+  const btn    = document.getElementById('save-btn');
   const status = document.getElementById('save-status');
   if (!currentDetailIdea) return;
-
   const fields = {
     automation_name:            document.getElementById('e-name').value.trim(),
     idea_author:                document.getElementById('e-author').value.trim(),
@@ -869,15 +1210,12 @@ window.saveEdit = async function() {
     test_data_available:        document.getElementById('e-testdata').value || null,
     process_documented:         document.getElementById('e-documented').value || null,
   };
-
   if (!fields.automation_name) {
     if (status) { status.textContent = 'Name is required.'; status.className = 'save-status err'; }
     return;
   }
-
   if (btn) btn.disabled = true;
   if (status) { status.textContent = 'Saving…'; status.className = 'save-status'; }
-
   try {
     await updateIdeaFull(currentDetailIdea.id, fields);
     currentDetailIdea = { ...currentDetailIdea, ...fields };
@@ -898,16 +1236,28 @@ window.changeStatus = async function(ideaId, newStatus) {
 // ===================== DIGI DRIVER ACTIONS =====================
 window.digiApprove = async function(ideaId) {
   const note = document.getElementById('digi-note-input')?.value.trim() || null;
-  const btn = document.querySelector('.digi-approval-actions .btn-advance');
+  const btn  = document.querySelector('.digi-approval-actions .btn-advance');
   if (btn) { btn.disabled = true; btn.textContent = 'Approving…'; }
   try {
     const updates = { status: 'In Development', digi_approved_by: currentUser.email };
     if (note) updates.digi_note = note;
     const { error } = await supabaseClient.from('automation_ideas').update(updates).eq('id', ideaId);
     if (error) throw error;
+
+    const idea = allIdeas.find(i => i.id === ideaId) || currentDetailIdea;
     if (currentDetailIdea && currentDetailIdea.id === ideaId) {
       currentDetailIdea = { ...currentDetailIdea, ...updates };
     }
+
+    // ── EMAIL TRIGGER: approved for development ───────────────────────────
+    if (idea) {
+      const submitterEmail = idea.submitter_email || null;
+      if (submitterEmail) {
+        const { subject, htmlBody } = emailApprovedForDevelopment(idea, note);
+        sendFestoEmail({ subject, htmlBody, recipients: [submitterEmail] });
+      }
+    }
+
     await fetchAndRenderIdeas();
     renderDetail(currentDetailIdea);
   } catch(err) {
@@ -919,16 +1269,28 @@ window.digiApprove = async function(ideaId) {
 
 window.digiReject = async function(ideaId) {
   const note = document.getElementById('digi-note-input')?.value.trim() || null;
-  const btn = document.querySelector('.digi-approval-actions .btn-reject-stage');
+  const btn  = document.querySelector('.digi-approval-actions .btn-reject-stage');
   if (btn) { btn.disabled = true; btn.textContent = 'Rejecting…'; }
   try {
     const updates = { status: 'Rejected', digi_approved_by: currentUser.email };
     if (note) updates.digi_note = note;
     const { error } = await supabaseClient.from('automation_ideas').update(updates).eq('id', ideaId);
     if (error) throw error;
+
+    const idea = allIdeas.find(i => i.id === ideaId) || currentDetailIdea;
     if (currentDetailIdea && currentDetailIdea.id === ideaId) {
       currentDetailIdea = { ...currentDetailIdea, ...updates };
     }
+
+    // ── EMAIL TRIGGER: rejected by Digi Driver ────────────────────────────
+    if (idea) {
+      const submitterEmail = idea.submitter_email || null;
+      if (submitterEmail) {
+        const { subject, htmlBody } = emailRejected({ ...idea, ...updates }, note, false);
+        sendFestoEmail({ subject, htmlBody, recipients: [submitterEmail] });
+      }
+    }
+
     await fetchAndRenderIdeas();
     renderDetail(currentDetailIdea);
   } catch(err) {
@@ -968,14 +1330,24 @@ window.digiSendToFunnel = async function(ideaId) {
     const { error } = await supabaseClient.from('automation_ideas').update(updates).eq('id', ideaId);
     if (error) throw error;
 
+    //const fnData = {}; galimai reiks removint
+
     if (currentDetailIdea && currentDetailIdea.id === ideaId) {
       currentDetailIdea = { ...currentDetailIdea, ...updates };
+    }
+
+    // ── EMAIL TRIGGER: funnel email to submitter ──────────────────────────
+    // fnData may contain the funnel link generated by the Edge Function
+    const funnelLink = null;
+    const submitterEmail = idea.submitter_email || null;
+    if (submitterEmail) {
+      const { subject, htmlBody } = emailSentToFunnel(idea, funnelLink, note);
+      sendFestoEmail({ subject, htmlBody, recipients: [submitterEmail] });
     }
 
     await fetchAndRenderIdeas();
     renderDetail(currentDetailIdea);
 
-    // Show a brief confirmation
     const box = document.querySelector('.digi-approval-box');
     if (box) {
       box.innerHTML = `
@@ -1117,10 +1489,16 @@ window.submitIdea = async function() {
       idea_author: author, automation_name: name, description: desc,
       standardized_process_score: std, digital_input: digital, rule_based: rule,
       software_systems: systems, weekly_hours: hours, speed_criticality: speed,
-      test_data_available: testdata, process_documented: documented
+      test_data_available: testdata, process_documented: documented,
     });
     closeForm();
     await fetchAndRenderIdeas();
+
+    // ── EMAIL TRIGGER: new idea submitted → notify Digi Drivers ──────────
+    if (idea) {
+      const { subject, htmlBody } = emailNewIdeaSubmitted(idea);
+      sendFestoEmail({ subject, htmlBody, recipients: DIGI_DRIVER_EMAILS });
+    }
 
     // Trigger AI rating automatically after insert (non-blocking)
     if (idea && AI_API_KEY && AI_API_KEY !== 'YOUR_OPENAI_KEY_HERE') {
@@ -1166,7 +1544,6 @@ window.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('modal-overlay').addEventListener('click', e => {
     if (e.target === document.getElementById('modal-overlay')) closeForm();
   });
-
   document.getElementById('login-password').addEventListener('keydown', e => {
     if (e.key === 'Enter') handleLogin();
   });
@@ -1176,18 +1553,18 @@ window.addEventListener('DOMContentLoaded', async () => {
 });
 
 // ===================== GLOBALS =====================
-window.showView       = showView;
-window.showDashboard  = showDashboard;
-window.openForm       = openForm;
-window.closeForm      = closeForm;
-window.renderIdeas    = renderIdeas;
-window.showDetailById = showDetailById;
-window.toggleTheme    = toggleTheme;
-window.toggleEditMode = toggleEditMode;
-window.discardEdit    = discardEdit;
-window.saveEdit       = saveEdit;
-window.reRateIdea     = reRateIdea;
-window.switchTab      = switchTab;
-window.digiApprove    = digiApprove;
-window.digiReject     = digiReject;
+window.showView         = showView;
+window.showDashboard    = showDashboard;
+window.openForm         = openForm;
+window.closeForm        = closeForm;
+window.renderIdeas      = renderIdeas;
+window.showDetailById   = showDetailById;
+window.toggleTheme      = toggleTheme;
+window.toggleEditMode   = toggleEditMode;
+window.discardEdit      = discardEdit;
+window.saveEdit         = saveEdit;
+window.reRateIdea       = reRateIdea;
+window.switchTab        = switchTab;
+window.digiApprove      = digiApprove;
+window.digiReject       = digiReject;
 window.digiSendToFunnel = digiSendToFunnel;
