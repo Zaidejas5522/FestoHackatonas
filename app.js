@@ -205,6 +205,9 @@ function showDashboard() {
   const driverTab = document.getElementById('driver-tab');
   if (driverTab) driverTab.style.display = isDriver() ? '' : 'none';
 
+  const driverNewTab = document.getElementById('driver-new-tab');
+  if (driverNewTab) driverNewTab.style.display = isDriver() ? '' : 'none';
+
   // Reset to all-ideas tab
   activeTab = 'all';
   document.querySelectorAll('.nav-tab').forEach(el => {
@@ -346,10 +349,10 @@ async function rateIdeaWithAI(idea, { showLoading = false } = {}) {
     // Determine status based on score range
     let newStatus;
     let aiDecision; // for display
-    if (safeScore >= 66) {
+    if (safeScore >= 95) {
       newStatus = 'Awaiting Digi Approval';
       aiDecision = 'Approved';
-    } else if (safeScore >= 50 && safeScore <= 65) {
+    } else if (safeScore >= 50 && safeScore <= 94) {
       newStatus = 'Driver Review';
       aiDecision = 'Borderline';
     } else {
