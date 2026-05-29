@@ -136,6 +136,81 @@
   <div class="detail-body" id="detail-body"></div>
 </div>
 
+<!-- ── FUNNEL VIEW ────────────────────────────────── -->
+<div id="funnel-view" style="display:none; min-height:100vh;">
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="topbar-logo">idea<span>flow</span></div>
+      <nav class="topbar-nav">
+        <button class="nav-tab active">✉ Funnel Queue</button>
+      </nav>
+    </div>
+    <div class="topbar-right">
+      <div class="topbar-user">signed in as <strong id="funnel-user-display"></strong></div>
+      <button class="btn-theme" id="theme-toggle-funnel" onclick="toggleTheme()" title="Toggle theme">🌙</button>
+      <button class="btn-logout" onclick="handleLogout()">Sign out</button>
+    </div>
+  </div>
+  <div class="dashboard-body">
+    <div class="ideas-grid" id="funnel-queue-grid"></div>
+  </div>
+</div>
+
+<!-- ── FUNNEL DETAIL VIEW ──────────────────────────── -->
+<div id="funnel-detail-view" style="display:none; min-height:100vh;">
+  <div class="detail-topbar">
+    <button class="btn btn-back btn-sm" onclick="showFunnelDashboardView()">← Back</button>
+    <div style="font-size:12px;color:var(--muted);letter-spacing:.06em;">FUNNEL REVIEW</div>
+  </div>
+  <div class="detail-body" id="funnel-detail-body"></div>
+</div> <!-- ← missing closing tag added -->
+
+<!-- ── STATISTICS VIEW ───────────────────────────────── -->
+<div id="stats-view" style="display:none; min-height:100vh;">
+  <div class="stats-topbar">
+    <button class="btn btn-back btn-sm" onclick="showDashboard()">← Back to Dashboard</button>
+    <div style="font-size:12px;color:var(--muted);letter-spacing:.06em;">IDEA STATISTICS</div>
+  </div>
+  <div class="stats-container">
+    <!-- Filter bar -->
+    <div class="stats-filters">
+      <div class="filter-group">
+        <label>Department</label>
+        <select id="stats-dept-select">
+          <option value="">Loading departments...</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>User (email or name)</label>
+        <input type="text" id="stats-user-input" list="stats-user-datalist" placeholder="Type to search user...">
+        <datalist id="stats-user-datalist"></datalist>
+      </div>
+      <div class="filter-group">
+        <button id="stats-reset-btn" class="btn btn-sm">Reset filters</button>
+      </div>
+    </div>
+
+    <!-- Statistics cards -->
+    <div class="stats-cards">
+      <div class="stat-card">
+        <div class="stat-number" id="stat-total">0</div>
+        <div class="stat-label">Total Ideas</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number" id="stat-development">0</div>
+        <div class="stat-label">In Development / Testing / Implemented</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number" id="stat-implemented">0</div>
+        <div class="stat-label">Fully Implemented</div>
+      </div>
+    </div>
+    <div class="chart-container">
+      <canvas id="scoreChart" width="800" height="400"></canvas>
+    </div>
+  </div>
+</div>
+
 <!-- ── MODAL ───────────────────────────────────────── -->
 <div id="modal-overlay">
   <div class="modal-box">
