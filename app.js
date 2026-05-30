@@ -68,7 +68,7 @@ function isDriver() {
 // ===================== FUNNEL ROLE =====================
 const FUNNEL_EMAILS = [
   'funnel@festo.com',
-  'funne1l@festo.com',
+  'funnel1@festo.com',
   // 'anotherfunnel@festo.com',  ← add real Funnel reviewer email(s) here
 ].map(e => e.toLowerCase());
 
