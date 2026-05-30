@@ -43,6 +43,13 @@ const DIGI_DRIVER_EMAILS = [
 
 const DRIVER_EMAILS = [
   'driver@festo.com',
+  'john.engineer@festo.com',
+  'sarah.sales@festo.com',
+  'mike.marketing@festo.com',
+  'helen.hr@festo.com',
+  'oscar.ops@festo.com',
+  'ivan.it@festo.com',
+  'fiona.finance@festo.com',
   // 'another@festo.com',
 ].map(e => e.toLowerCase());
 
