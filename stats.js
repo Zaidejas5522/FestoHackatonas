@@ -1,16 +1,18 @@
 // ===================== STATISTICS MODULE =====================
 let statsChart = null;
 let currentStatsFilter = { departmentId: null, userValue: null };
-let allProfiles = []; // cache profiles for department→user mapping
-let statsPieChart = null;   // store the pie chart instance
+let allProfiles = [];
+let statsPieChart = null;
 
-// ── Load departments ───────────────────────────────────────────────────────
+// ── Load departments ───────────────────────────────────────
 async function loadDepartments() {
   const deptSelect = document.getElementById('stats-dept-select');
   if (!deptSelect) return;
   try {
     const { data, error } = await supabaseClient
-      .from('department').select('id, name').order('name');
+      .from('department')
+      .select('id, name')
+      .order('name');
     if (error) throw error;
     deptSelect.innerHTML = '<option value="">All Departments</option>';
     data.forEach(dept => {
@@ -19,16 +21,18 @@ async function loadDepartments() {
       opt.textContent = dept.name;
       deptSelect.appendChild(opt);
     });
-  } catch (err) { console.error('Failed to load departments:', err); }
+  } catch (err) {
+    console.error('Failed to load departments:', err);
+  }
 }
 
-// ── Load all profiles once, filter datalist by department ─────────────────
+// ── Load all profiles, filter datalist by department ──────
 async function loadUsers(departmentId) {
-  const userInput    = document.getElementById('stats-user-input');
+  const userInput = document.getElementById('stats-user-input');
   const userDatalist = document.getElementById('stats-user-datalist');
   if (!userInput || !userDatalist) return;
 
-  // Only fetch all profiles once
+  // Fetch all profiles only once
   if (!allProfiles.length) {
     try {
       const { data, error } = await supabaseClient
@@ -37,7 +41,10 @@ async function loadUsers(departmentId) {
         .order('full_name', { ascending: true });
       if (error) throw error;
       allProfiles = data || [];
-    } catch (err) { console.error('Failed to load profiles:', err); return; }
+    } catch (err) {
+      console.error('Failed to load profiles:', err);
+      return;
+    }
   }
 
   // Filter by department if selected
@@ -45,19 +52,23 @@ async function loadUsers(departmentId) {
     ? allProfiles.filter(p => String(p.department_id) === String(departmentId))
     : allProfiles;
 
+  // Build datalist options with human‑readable names
   userDatalist.innerHTML = '';
   filtered.forEach(profile => {
     const opt = document.createElement('option');
-    opt.value = profile.email;
+    // Use full name as the selectable value (will be stored in the input)
+    opt.value = profile.full_name || profile.email;
+    // Display: "Full Name (email)"
     opt.textContent = `${profile.full_name || profile.email} (${profile.email})`;
     userDatalist.appendChild(opt);
   });
 
+  // Clear the input and stored filter when department changes
   userInput.value = '';
   currentStatsFilter.userValue = null;
 }
 
-// ── Event handlers ─────────────────────────────────────────────────────────
+// ── Event handlers ─────────────────────────────────────────
 async function onDepartmentChange() {
   const deptSelect = document.getElementById('stats-dept-select');
   currentStatsFilter.departmentId = deptSelect.value || null;
@@ -67,24 +78,25 @@ async function onDepartmentChange() {
 }
 
 async function onUserChange() {
-  const val = document.getElementById('stats-user-input')?.value.trim() || null;
-  currentStatsFilter.userValue = val || null;
+  const userInput = document.getElementById('stats-user-input');
+  const selectedValue = userInput?.value.trim() || null;
+  currentStatsFilter.userValue = selectedValue;
   await renderStatistics();
 }
 
 async function resetFilters() {
   const deptSelect = document.getElementById('stats-dept-select');
-  const userInput  = document.getElementById('stats-user-input');
+  const userInput = document.getElementById('stats-user-input');
   if (deptSelect) deptSelect.value = '';
-  if (userInput)  userInput.value  = '';
+  if (userInput) userInput.value = '';
   currentStatsFilter = { departmentId: null, userValue: null };
-  await loadUsers(null);        // ← wait for profiles to reload
-  await renderStatistics();     // ← wait for rendering
+  await loadUsers(null);
+  await renderStatistics();
 }
-// ── Filter helpers ─────────────────────────────────────────────────────────
+
+// ── Filter helpers ─────────────────────────────────────────
 function filterIdeasByDepartment(ideas, departmentId) {
   if (!departmentId) return ideas;
-  // Get all emails belonging to this department from cached profiles
   const deptEmails = allProfiles
     .filter(p => String(p.department_id) === String(departmentId))
     .map(p => p.email?.toLowerCase());
@@ -103,36 +115,31 @@ function filterIdeasByUser(ideas, userValue) {
   );
 }
 
-// ── Main render ────────────────────────────────────────────────────────────
+// ── Main render function ───────────────────────────────────
 async function renderStatistics() {
   try {
     if (!allIdeas.length && currentUser) await fetchAndRenderIdeas();
-
-    // Make sure profiles are loaded (needed for dept filter)
     if (!allProfiles.length) await loadUsers(null);
 
     let ideas = [...allIdeas];
 
-    // Apply department filter first
     if (currentStatsFilter.departmentId) {
       ideas = filterIdeasByDepartment(ideas, currentStatsFilter.departmentId);
     }
-
-    // Then apply user filter
     if (currentStatsFilter.userValue) {
       ideas = filterIdeasByUser(ideas, currentStatsFilter.userValue);
     }
 
-    // Summary numbers (safe: even if elements missing, don't crash)
+    // Summary cards
     const totalEl = document.getElementById('stat-total');
     const devEl = document.getElementById('stat-development');
     const implEl = document.getElementById('stat-implemented');
     if (totalEl) totalEl.textContent = ideas.length;
     if (devEl) devEl.textContent = ideas.filter(i =>
-      ['In Development','Testing','Implemented'].includes(i.status)).length;
+      ['In Development', 'Testing', 'Implemented'].includes(i.status)).length;
     if (implEl) implEl.textContent = ideas.filter(i => i.status === 'Implemented').length;
 
-    // ── NEW: total weekly hours saved from completed ideas ──
+    // Weekly hours saved (completed)
     const hoursSavedEl = document.getElementById('stat-hours-saved');
     if (hoursSavedEl) {
       const totalHours = ideas
@@ -141,19 +148,17 @@ async function renderStatistics() {
       hoursSavedEl.textContent = totalHours;
     }
 
-    // AI score histogram
+    // AI score histogram (bar chart)
     const ratedIdeas = ideas.filter(i => i.ai_score != null);
-    const binLabels  = ['0-9%','10-19%','20-29%','30-39%','40-49%','50-59%','60-69%','70-79%','80-89%','90-100%'];
-    const counts     = new Array(10).fill(0);
+    const binLabels = ['0-9%', '10-19%', '20-29%', '30-39%', '40-49%', '50-59%', '60-69%', '70-79%', '80-89%', '90-100%'];
+    const counts = new Array(10).fill(0);
     ratedIdeas.forEach(idea => {
       let bin = Math.floor(idea.ai_score / 10);
       if (bin >= 10) bin = 9;
       counts[bin]++;
     });
 
-    // Destroy previous bar chart if exists
     if (statsChart) statsChart.destroy();
-
     const canvas = document.getElementById('scoreChart');
     if (canvas) {
       const ctx = canvas.getContext('2d');
@@ -194,13 +199,12 @@ async function renderStatistics() {
       });
     }
 
-    // Render pie chart – but only if we have a canvas and ideas exist
+    // Doughnut chart (pipeline status)
     if (typeof renderPieChart === 'function') {
       renderPieChart(ideas);
     }
   } catch (err) {
     console.error('Error in renderStatistics:', err);
-    // Optionally display a fallback message
     const canvas = document.getElementById('scoreChart');
     if (canvas) {
       const ctx = canvas.getContext('2d');
@@ -212,55 +216,27 @@ async function renderStatistics() {
   }
 }
 
-// ── Globals ────────────────────────────────────────────────────────────────
-window.showStatsView = async function() {
-  showView('stats-view');
-  await loadDepartments();
-  await loadUsers(null);
-  await renderStatistics();
-};
-
-window.refreshStatsIfVisible = function() {
-  const statsView = document.getElementById('stats-view');
-  if (statsView && statsView.style.display !== 'none') renderStatistics();
-};
-
-document.addEventListener('DOMContentLoaded', () => {
-  const deptSelect = document.getElementById('stats-dept-select');
-  const userInput  = document.getElementById('stats-user-input');
-  const resetBtn   = document.getElementById('stats-reset-btn');
-  if (deptSelect) deptSelect.addEventListener('change', onDepartmentChange);
-  if (userInput)  userInput.addEventListener('input', onUserChange);  // 'input' not 'change'
-  if (resetBtn)   resetBtn.addEventListener('click', resetFilters);
-});
-
-// Helper: categorize idea status for pie chart
+// ── Pie chart helpers ──────────────────────────────────────
 function getIdeaCategory(status) {
   if (status === 'Implemented') return 'completed';
   if (status === 'In Development' || status === 'Testing') return 'inProgress';
   if (status === 'Rejected') return 'declined';
-  return 'submitted';   // everything else: Submitted, AI Review, Driver Review, Consulting, Awaiting Digi Approval, Funnel, etc.
+  return 'submitted';
 }
 
 function renderPieChart(ideas) {
   const categories = {
-    inDevelopment: { label: 'In Development', color: '#facc15', count: 0 }, // yellow
-    completed:     { label: 'Completed',      color: '#22c55e', count: 0 }, // green
-    declined:      { label: 'Declined',       color: '#ef4444', count: 0 }  // red
+    inDevelopment: { label: 'In Development', color: '#facc15', count: 0 },
+    completed: { label: 'Completed', color: '#22c55e', count: 0 },
+    declined: { label: 'Declined', color: '#ef4444', count: 0 }
   };
 
   ideas.forEach(idea => {
-    if (idea.status === 'Implemented') {
-      categories.completed.count++;
-    } else if (idea.status === 'In Development' || idea.status === 'Testing') {
-      categories.inDevelopment.count++;
-    } else if (idea.status === 'Rejected') {
-      categories.declined.count++;
-    }
-    // All other statuses are ignored
+    if (idea.status === 'Implemented') categories.completed.count++;
+    else if (idea.status === 'In Development' || idea.status === 'Testing') categories.inDevelopment.count++;
+    else if (idea.status === 'Rejected') categories.declined.count++;
   });
 
-  // Only show categories that have at least one idea (optional, but keeps chart clean)
   const labels = [];
   const data = [];
   const colors = [];
@@ -272,7 +248,6 @@ function renderPieChart(ideas) {
     }
   });
 
-  // If no data, clear chart and exit
   if (data.length === 0) {
     const canvas = document.getElementById('pieChart');
     if (canvas) {
@@ -290,7 +265,6 @@ function renderPieChart(ideas) {
   if (!canvas) return;
 
   if (statsPieChart) statsPieChart.destroy();
-
   const ctx = canvas.getContext('2d');
   const textColor = getComputedStyle(document.body).getPropertyValue('--text').trim() || '#e8e8f0';
 
@@ -323,3 +297,25 @@ function renderPieChart(ideas) {
     }
   });
 }
+
+// ── Global exports and initialisation ──────────────────────
+window.showStatsView = async function() {
+  showView('stats-view');
+  await loadDepartments();
+  await loadUsers(null);
+  await renderStatistics();
+};
+
+window.refreshStatsIfVisible = function() {
+  const statsView = document.getElementById('stats-view');
+  if (statsView && statsView.style.display !== 'none') renderStatistics();
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+  const deptSelect = document.getElementById('stats-dept-select');
+  const userInput = document.getElementById('stats-user-input');
+  const resetBtn = document.getElementById('stats-reset-btn');
+  if (deptSelect) deptSelect.addEventListener('change', onDepartmentChange);
+  if (userInput) userInput.addEventListener('change', onUserChange); // 'change' instead of 'input'
+  if (resetBtn) resetBtn.addEventListener('click', resetFilters);
+});
