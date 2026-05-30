@@ -132,6 +132,15 @@ async function renderStatistics() {
       ['In Development','Testing','Implemented'].includes(i.status)).length;
     if (implEl) implEl.textContent = ideas.filter(i => i.status === 'Implemented').length;
 
+    // ── NEW: total weekly hours saved from completed ideas ──
+    const hoursSavedEl = document.getElementById('stat-hours-saved');
+    if (hoursSavedEl) {
+      const totalHours = ideas
+        .filter(i => i.status === 'Implemented')
+        .reduce((sum, i) => sum + (i.weekly_hours || 0), 0);
+      hoursSavedEl.textContent = totalHours;
+    }
+
     // AI score histogram
     const ratedIdeas = ideas.filter(i => i.ai_score != null);
     const binLabels  = ['0-9%','10-19%','20-29%','30-39%','40-49%','50-59%','60-69%','70-79%','80-89%','90-100%'];
@@ -158,30 +167,30 @@ async function renderStatistics() {
           datasets: [{
             label: 'Number of Ideas',
             data: counts,
-            backgroundColor: 'rgba(59, 130, 246, 0.6)',   // uniform blue
-            borderColor: '#3b82f6',                       // solid blue border
+            backgroundColor: 'rgba(59, 130, 246, 0.6)',
+            borderColor: '#3b82f6',
             borderWidth: 1,
             borderRadius: 6,
           }]
         },
         options: {
-  responsive: true,
-  maintainAspectRatio: true,
-  plugins: {
-    legend: { display: false },                     // remove the "Number of Ideas" label
-    tooltip: { callbacks: { label: ctx => `${ctx.raw} idea(s)` } }
-  },
-  scales: {
-    y: {
-      title: { display: true, text: 'Number of Ideas', color: mutedColor },
-      ticks: { color: textColor, stepSize: 1, precision: 0 }
-    },
-    x: {
-      title: { display: true, text: 'AI Score Range', color: mutedColor },
-      ticks: { color: textColor, maxRotation: 45, minRotation: 45 }   // default colour
-    }
-  }
-}
+          responsive: true,
+          maintainAspectRatio: true,
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: ctx => `${ctx.raw} idea(s)` } }
+          },
+          scales: {
+            y: {
+              title: { display: true, text: 'Number of Ideas', color: mutedColor },
+              ticks: { color: textColor, stepSize: 1, precision: 0 }
+            },
+            x: {
+              title: { display: true, text: 'AI Score Range', color: mutedColor },
+              ticks: { color: textColor, maxRotation: 45, minRotation: 45 }
+            }
+          }
+        }
       });
     }
 
