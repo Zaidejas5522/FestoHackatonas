@@ -310,57 +310,57 @@
 </div>
 
 <!-- ── STATISTICS VIEW ───────────────────────────────── -->
-<div id="stats-view" class="app-shell" style="display:none;">
-  <header class="stats-topbar glass-bar">
-    <button class="btn btn-back btn-sm" onclick="showDashboard()" type="button">← Back to Dashboard</button>
-    <p class="page-eyebrow">Analytics</p>
-  </header>
+<div id="stats-view" style="display:none; min-height:100vh;">
+  <div class="stats-topbar">
+    <button class="btn btn-back btn-sm" onclick="showDashboard()">← Back to Dashboard</button>
+    <div style="font-size:12px;color:var(--muted);letter-spacing:.06em;">IDEA STATISTICS</div>
+  </div>
   <div class="stats-container">
-    <header class="page-header page-header--compact">
-      <div class="page-header-text">
-        <p class="page-eyebrow">Performance insights</p>
-        <h1 class="page-title">Idea statistics</h1>
-      </div>
-    </header>
-
-    <div class="stats-filters glass-panel">
+    <!-- Filter bar -->
+    <div class="stats-filters">
       <div class="filter-group">
-        <label for="stats-dept-select">Department</label>
+        <label>Department</label>
         <select id="stats-dept-select">
           <option value="">Loading departments...</option>
         </select>
       </div>
       <div class="filter-group">
-        <label for="stats-user-input">User (email or name)</label>
+        <label>User (email or name)</label>
         <input type="text" id="stats-user-input" list="stats-user-datalist" placeholder="Type to search user...">
         <datalist id="stats-user-datalist"></datalist>
       </div>
-      <div class="filter-group filter-group--action">
-        <label class="filter-label-spacer" aria-hidden="true">&nbsp;</label>
-        <button id="stats-reset-btn" class="btn btn-sm btn-ghost" type="button">Reset filters</button>
+      <div class="filter-group">
+        <button id="stats-reset-btn" class="btn btn-sm">Reset filters</button>
       </div>
     </div>
 
+    <!-- Summary cards -->
     <div class="stats-cards">
-      <div class="stat-card glass-panel">
+      <div class="stat-card">
         <div class="stat-number" id="stat-total">0</div>
         <div class="stat-label">Total Ideas</div>
       </div>
-      <div class="stat-card glass-panel">
+      <div class="stat-card">
         <div class="stat-number" id="stat-development">0</div>
         <div class="stat-label">In Development / Testing / Implemented</div>
       </div>
-      <div class="stat-card glass-panel">
+      <div class="stat-card">
         <div class="stat-number" id="stat-implemented">0</div>
         <div class="stat-label">Fully Implemented</div>
       </div>
     </div>
-    <div class="chart-container glass-panel">
-      <canvas id="scoreChart" width="800" height="400"></canvas>
+
+    <!-- Two‑column chart area -->
+    <div class="stats-charts">
+      <div class="chart-container chart-container--bar">
+        <canvas id="scoreChart" width="800" height="400"></canvas>
+      </div>
+      <div class="chart-container chart-container--pie">
+        <canvas id="pieChart" width="400" height="400"></canvas>
+      </div>
     </div>
   </div>
 </div>
-
 <!-- ── REJECTED / ARCHIVE VIEW ──────────────────────── -->
 <div id="rejected-view" class="app-shell" style="display:none;">
   <header class="topbar glass-bar">
