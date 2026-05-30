@@ -37,12 +37,14 @@ const PIPELINE_STAGES = [
 // ===================== DIGI DRIVER ROLE =====================
 const DIGI_DRIVER_EMAILS = [
   'digidriver@festo.com',
+  'digidriver1@festo.com',
   'lt6u7091@festo.net' // ← replace with real Digi Driver email(s)
   // 'another@festo.com',
 ].map(e => e.toLowerCase());
 
 const DRIVER_EMAILS = [
   'driver@festo.com',
+  'driver1@festo.com',
   'john.engineer@festo.com',
   'sarah.sales@festo.com',
   'mike.marketing@festo.com',
@@ -66,6 +68,7 @@ function isDriver() {
 // ===================== FUNNEL ROLE =====================
 const FUNNEL_EMAILS = [
   'funnel@festo.com',
+  'funne1l@festo.com',
   // 'anotherfunnel@festo.com',  ← add real Funnel reviewer email(s) here
 ].map(e => e.toLowerCase());
 
