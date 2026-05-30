@@ -146,39 +146,128 @@ async function sendFestoEmail({ subject, htmlBody, recipients }) {
 // ── EMAIL TEMPLATES ───────────────────────────────────────────────────────────
 
 function emailBase(contentHtml) {
+  // Outlook-safe: table layout, all styles inline, no border-radius, no rgba(), no CSS classes.
+  // contentHtml may contain .idea-box/.label/.value divs and .badge-* / .btn spans — all handled
+  // via a minimal <style> block that Outlook 365 web honours, plus inline fallbacks where critical.
   return `<!doctype html>
-<html lang="en">
+<html lang="en" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
 <title>IdeaFlow Notification</title>
+<!--[if mso]>
+<noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript>
+<![endif]-->
 <style>
-  body{margin:0;padding:0;background:#0c0c0f;font-family:'Helvetica Neue',Arial,sans-serif;color:#e8e8f0;}
-  .wrap{max-width:600px;margin:40px auto;background:#141418;border:1px solid #2a2a35;border-radius:16px;overflow:hidden;}
-  .header{background:#1c1c22;padding:28px 36px;border-bottom:1px solid #2a2a35;}
-  .logo{font-size:22px;font-weight:900;letter-spacing:-1px;color:#e8e8f0;}
-  .logo span{color:#c8f74a;}
-  .body{padding:32px 36px;}
-  h2{margin:0 0 16px;font-size:20px;font-weight:700;color:#e8e8f0;}
-  p{margin:0 0 14px;font-size:14px;line-height:1.7;color:#a0a0b8;}
-  .idea-box{background:#1c1c22;border:1px solid #2a2a35;border-radius:10px;padding:18px 20px;margin:20px 0;}
-  .idea-box .label{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#6b6b80;margin-bottom:6px;}
-  .idea-box .value{font-size:15px;font-weight:600;color:#e8e8f0;}
-  .badge{display:inline-block;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;letter-spacing:.06em;}
-  .badge-green{background:rgba(74,247,142,.15);color:#4af78e;border:1px solid rgba(74,247,142,.3);}
-  .badge-red{background:rgba(247,97,74,.15);color:#f7614a;border:1px solid rgba(247,97,74,.3);}
-  .badge-yellow{background:rgba(247,201,72,.15);color:#f7c948;border:1px solid rgba(247,201,72,.3);}
-  .badge-purple{background:rgba(123,97,255,.15);color:#9b82ff;border:1px solid rgba(123,97,255,.3);}
-  .btn{display:inline-block;margin-top:20px;padding:12px 24px;background:#7b61ff;color:#fff;border-radius:8px;font-size:14px;font-weight:700;text-decoration:none;letter-spacing:.04em;}
-  .footer{padding:20px 36px;border-top:1px solid #2a2a35;font-size:11px;color:#6b6b80;text-align:center;line-height:1.6;}
+  /* Reset */
+  body,table,td,p,a,h2{margin:0;padding:0;border:0;}
+  body{background-color:#f0f0f0;font-family:Arial,sans-serif;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;}
+  table{border-collapse:collapse;mso-table-lspace:0;mso-table-rspace:0;}
+  img{border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;}
+  /* Content styles — used inside contentHtml */
+  h2{font-size:20px;font-weight:bold;color:#1a1a2e;margin:0 0 14px 0;font-family:Arial,sans-serif;}
+  p{font-size:14px;line-height:1.7;color:#4a5568;margin:0 0 14px 0;font-family:Arial,sans-serif;}
+  strong{font-weight:bold;}
+  .idea-box{background-color:#f4f6fb;border-left:4px solid #2563c8;padding:12px 16px;margin:8px 0;}
+  .idea-box .label{font-size:10px;font-weight:bold;letter-spacing:1px;text-transform:uppercase;color:#64748b;margin-bottom:4px;font-family:Arial,sans-serif;}
+  .idea-box .value{font-size:14px;font-weight:bold;color:#1a1a2e;font-family:Arial,sans-serif;}
+  .badge{display:inline;padding:2px 8px;font-size:11px;font-weight:bold;font-family:Arial,sans-serif;}
+  .badge-green{background-color:#dcfce7;color:#166534;}
+  .badge-red{background-color:#fee2e2;color:#991b1b;}
+  .badge-yellow{background-color:#fef9c3;color:#854d0e;}
+  .badge-purple{background-color:#ede9fe;color:#5b21b6;}
+  .btn{display:inline-block;background-color:#2563c8;color:#ffffff;font-size:14px;font-weight:bold;text-decoration:none;padding:12px 28px;font-family:Arial,sans-serif;}
 </style>
 </head>
-<body>
-<div class="wrap">
-  <div class="header"><div class="logo">idea<span>flow</span></div></div>
-  <div class="body">${contentHtml}</div>
-  <div class="footer">IdeaFlow — Festo Automation Ideas Platform<br>This is an automated notification. Do not reply to this email.</div>
-</div>
+<body style="margin:0;padding:0;background-color:#f0f0f0;">
+
+<!-- Outer wrapper -->
+<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f0f0f0;">
+<tr><td align="center" style="padding:32px 16px;">
+
+  <!-- Email card -->
+  <table width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;background-color:#ffffff;" class="email-card">
+
+    <!-- ── HEADER ── -->
+    <tr>
+      <td style="background-color:#1a1a2e;padding:0;" bgcolor="#1a1a2e">
+        <!-- Blue top accent bar -->
+        <table width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr><td height="4" style="height:4px;font-size:4px;line-height:4px;background-color:#2563c8;" bgcolor="#2563c8">&nbsp;</td></tr>
+        </table>
+        <!-- Logo row -->
+        <table width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td style="padding:24px 36px 20px 36px;">
+              <!-- DIGI wordmark -->
+              <table cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="font-family:Arial Black,Arial,sans-serif;font-size:32px;font-weight:900;color:#ffffff;letter-spacing:-0.5px;line-height:1;" valign="middle">DIGI</td>
+                  <!-- Boxed COMM / UNITY -->
+                  <td width="8" style="width:8px;">&nbsp;</td>
+                  <td style="border:2px solid #2563c8;padding:3px 10px;" valign="middle">
+                    <table cellpadding="0" cellspacing="0" border="0">
+                      <tr><td style="font-family:Arial,sans-serif;font-size:12px;font-weight:bold;color:#2563c8;letter-spacing:3px;line-height:1.2;">COMM</td></tr>
+                      <tr><td style="font-family:Arial,sans-serif;font-size:10px;font-weight:bold;color:#2563c8;letter-spacing:4px;line-height:1.2;padding-top:2px;">UNITY</td></tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+              <!-- Circuit decoration row -->
+              <table cellpadding="0" cellspacing="0" border="0" style="margin-top:10px;">
+                <tr>
+                  <td width="6" height="6" style="width:6px;height:6px;background-color:#2563c8;font-size:6px;line-height:6px;" bgcolor="#2563c8">&nbsp;</td>
+                  <td width="16" height="2" style="width:16px;height:2px;background-color:#2563c8;font-size:2px;line-height:2px;" bgcolor="#2563c8">&nbsp;</td>
+                  <td width="32" height="2" style="width:32px;height:2px;background-color:#2563c8;font-size:2px;line-height:2px;" bgcolor="#2563c8">&nbsp;</td>
+                  <td width="6" height="6" style="width:6px;height:6px;background-color:#2563c8;font-size:6px;line-height:6px;" bgcolor="#2563c8">&nbsp;</td>
+                </tr>
+              </table>
+              <!-- Tagline -->
+              <p style="margin:8px 0 0 0;font-size:10px;color:#8899bb;letter-spacing:2px;text-transform:uppercase;font-family:Arial,sans-serif;">Festo Automation Ideas Platform</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+
+    <!-- ── BODY ── -->
+    <tr>
+      <td style="padding:32px 36px;background-color:#ffffff;" bgcolor="#ffffff">
+        ${contentHtml}
+      </td>
+    </tr>
+
+    <!-- ── FOOTER ── -->
+    <tr>
+      <td style="background-color:#f4f6fb;padding:0;" bgcolor="#f4f6fb">
+        <!-- Top border line -->
+        <table width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr><td height="1" style="height:1px;font-size:1px;line-height:1px;background-color:#e2e8f0;" bgcolor="#e2e8f0">&nbsp;</td></tr>
+        </table>
+        <table width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td style="padding:20px 36px;text-align:center;">
+              <p style="margin:0 0 4px 0;font-size:12px;font-weight:bold;color:#1a1a2e;font-family:Arial,sans-serif;">
+                DIGI<span style="color:#2563c8;">COMMUNITY</span> &nbsp;&middot;&nbsp; IdeaFlow
+              </p>
+              <p style="margin:0;font-size:11px;color:#94a3b8;line-height:1.6;font-family:Arial,sans-serif;">
+                This is an automated notification &mdash; please do not reply to this email.<br>
+                Festo SE &amp; Co. KG &nbsp;&middot;&nbsp; Esslingen am Neckar, Germany
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+
+  </table>
+  <!-- /Email card -->
+
+</td></tr>
+</table>
+<!-- /Outer wrapper -->
+
 </body>
 </html>`;
 }

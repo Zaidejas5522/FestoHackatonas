@@ -2185,3 +2185,38 @@
      margin-left: 6px;
      text-transform: none;
    }
+
+/* ── SITE FOOTER ── */
+.site-footer {
+  background: #0c0c0f;
+  border-top: 1px solid #1e1e28;
+  padding: 16px 24px;        /* match your topbar's horizontal padding exactly */
+}
+.site-footer-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  /* no max-width — let it match the topbar naturally */
+}
+.festo-logo {
+  width: 80px;
+  height: 22px;
+  display: block;
+}
+.site-footer-divider {
+  display: inline-block;
+  width: 1px;
+  height: 16px;
+  background: #2a2a35;
+  margin: 0 14px;
+  vertical-align: middle;
+}
+.site-footer-product {
+  font-size: 12px;
+  color: #6b6b80;
+  vertical-align: middle;
+}
+.site-footer-right {
+  font-size: 11px;
+  color: #3a3a4a;
+}
